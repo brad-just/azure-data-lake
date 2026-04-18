@@ -135,7 +135,7 @@ Stopping AKS and PostgreSQL reduces idle cost to ~$5/month (storage only).
 ```bash
 # Stop AKS cluster (VMs stop billing; cluster config is preserved)
 az aks stop \
-  --name $(terraform output -raw aks_cluster_name) \
+  --name <aks_cluster_name> \
   --resource-group <resource_group_name>
 
 # Stop PostgreSQL (note: Azure auto-restarts after 7 days)
@@ -148,7 +148,7 @@ az postgres flexible-server stop \
 
 ```bash
 az aks start \
-  --name $(terraform output -raw aks_cluster_name) \
+  --name <aks_cluster_name> \
   --resource-group <resource_group_name>
 
 az postgres flexible-server start \
