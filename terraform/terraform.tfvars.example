@@ -1,0 +1,49 @@
+# ── Required: no defaults ─────────────────────────────────────────────────────
+
+subscription_id = "00000000-0000-0000-0000-000000000000"
+location        = "eastus2"
+
+resource_group_name = "rg-datalake-prod"  # must exist — created by bootstrap/
+project             = "datalake"
+environment         = "production"
+
+# Storage account names must be globally unique, 3-24 lowercase alphanumeric characters.
+adls_storage_account_name = "stdatalakeprodadls"
+blob_storage_account_name = "stdatalakeprodblob"
+
+# Key Vault name must be globally unique, 3-24 alphanumeric and hyphens.
+keyvault_name = "kv-datalake-prod"
+
+# ACR name must be globally unique, 5-50 alphanumeric characters.
+acr_name = "crdatalakeprod"
+
+# PostgreSQL admin username (password is auto-generated and stored in Key Vault).
+postgres_admin_username = "pgadmin"
+
+# GitHub OIDC configuration — used to create the federated credential.
+github_org  = "my-org"
+github_repo = "azure-data-lake"
+
+# List of CIDRs allowed to reach the AKS API server.
+# Must include:
+#   - Your workstation's public IP (run: curl ifconfig.me)
+#   - GitHub Actions runner IP ranges (fetch from https://api.github.com/meta, "actions" key)
+#     Alternatively, add the entire GitHub meta range for Actions runners.
+api_server_authorized_ip_ranges = [
+  "203.0.113.10/32",    # operator workstation — replace with your actual IP
+  "4.148.0.0/16",       # example GitHub Actions runner range — verify from api.github.com/meta
+]
+
+# ── Optional: have sensible defaults ─────────────────────────────────────────
+
+# vnet_address_space    = "10.0.0.0/16"
+# aks_subnet_prefix     = "10.0.0.0/22"
+# db_subnet_prefix      = "10.0.4.0/24"
+# pe_subnet_prefix      = "10.0.5.0/24"
+
+# aks_kubernetes_version  = null   # null = latest stable
+# aks_system_vm_size      = "Standard_D2s_v3"
+# aks_system_node_count   = 2
+# aks_spark_vm_size       = "Standard_E8s_v3"
+# aks_spark_min_count     = 1
+# aks_spark_max_count     = 10

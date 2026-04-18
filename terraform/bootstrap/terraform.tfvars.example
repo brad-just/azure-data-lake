@@ -1,0 +1,6 @@
+subscription_id         = "00000000-0000-0000-0000-000000000000"
+resource_group_name     = "rg-datalake-prod"
+location                = "eastus2"
+tfstate_storage_account = "stdatalakeprodtfstate"   # must be globally unique, 3-24 lowercase alphanumeric
+project                 = "datalake"
+environment             = "production"

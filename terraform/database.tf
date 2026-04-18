@@ -1,0 +1,83 @@
+resource "random_password" "postgres" {
+  length           = 32
+  special          = true
+  override_special = "!#$%&*()-_=+[]{}<>:?"
+}
+
+resource "azurerm_postgresql_flexible_server" "main" {
+  name                   = "${var.project}-postgres"
+  location               = data.azurerm_resource_group.main.location
+  resource_group_name    = data.azurerm_resource_group.main.name
+  version                = "16"
+  administrator_login    = var.postgres_admin_username
+  administrator_password = random_password.postgres.result
+
+  # VNet integration — server lives inside the delegated database subnet.
+  # No separate private endpoint needed; connectivity is via the subnet.
+  delegated_subnet_id           = azurerm_subnet.database.id
+  private_dns_zone_id           = azurerm_private_dns_zone.postgres.id
+  public_network_access_enabled = false
+
+  sku_name   = "B_Standard_B1ms"
+  storage_mb = 32768
+
+  backup_retention_days        = 7
+  geo_redundant_backup_enabled = false
+
+  authentication {
+    active_directory_auth_enabled = false
+    password_auth_enabled         = true
+  }
+
+  tags = local.tags
+
+  depends_on = [azurerm_private_dns_zone_virtual_network_link.postgres]
+
+  lifecycle {
+    ignore_changes = [zone]
+  }
+}
+
+resource "azurerm_postgresql_flexible_server_database" "airbyte" {
+  name      = "airbyte_db"
+  server_id = azurerm_postgresql_flexible_server.main.id
+  charset   = "UTF8"
+  collation = "en_US.utf8"
+}
+
+resource "azurerm_postgresql_flexible_server_database" "nessie" {
+  name      = "nessie_db"
+  server_id = azurerm_postgresql_flexible_server.main.id
+  charset   = "UTF8"
+  collation = "en_US.utf8"
+}
+
+resource "azurerm_postgresql_flexible_server_database" "superset" {
+  name      = "superset_db"
+  server_id = azurerm_postgresql_flexible_server.main.id
+  charset   = "UTF8"
+  collation = "en_US.utf8"
+}
+
+resource "azurerm_postgresql_flexible_server_database" "airflow" {
+  name      = "airflow_db"
+  server_id = azurerm_postgresql_flexible_server.main.id
+  charset   = "UTF8"
+  collation = "en_US.utf8"
+}
+
+resource "azurerm_key_vault_secret" "postgres_password" {
+  name         = "postgres-admin-password"
+  value        = random_password.postgres.result
+  key_vault_id = azurerm_key_vault.main.id
+
+  depends_on = [azurerm_role_assignment.keyvault_terraform_admin]
+}
+
+resource "azurerm_key_vault_secret" "postgres_fqdn" {
+  name         = "postgres-fqdn"
+  value        = azurerm_postgresql_flexible_server.main.fqdn
+  key_vault_id = azurerm_key_vault.main.id
+
+  depends_on = [azurerm_role_assignment.keyvault_terraform_admin]
+}
