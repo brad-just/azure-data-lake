@@ -64,6 +64,12 @@ resource "azurerm_role_assignment" "github_actions_keyvault_officer" {
   principal_id         = azuread_service_principal.github_actions.object_id
 }
 
+resource "azurerm_role_assignment" "github_actions_keyvault_rbac_admin" {
+  scope                = azurerm_key_vault.main.id
+  role_definition_name = "Role Based Access Control Administrator"
+  principal_id         = azuread_service_principal.github_actions.object_id
+}
+
 resource "azurerm_role_assignment" "github_actions_acr_push" {
   scope                = azurerm_container_registry.main.id
   role_definition_name = "AcrPush"
