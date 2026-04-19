@@ -8,7 +8,8 @@ on:
 
 permissions:
   id-token: write
-  contents: write  # required to commit .current-tag back to the repo
+  contents: read
+  variables: write  # required to update SPARK_IMAGE_TAG repo variable
 
 jobs:
   build-and-push:
@@ -35,15 +36,7 @@ jobs:
           docker push "${IMAGE}:${{ github.sha }}"
           docker push "${IMAGE}:latest"
 
-      # Write the image SHA so helm-deploy.yml can consume it without hardcoding :latest.
-      # TODO: if tag propagation is handled differently, update helm-deploy.yml to match.
-      - name: write current tag
-        run: echo "${{ github.sha }}" > docker/spark/.current-tag
-
-      - name: commit tag file
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docker/spark/.current-tag
-          git commit -m "ci: update spark image tag to ${{ github.sha }}"
-          git push
+      - name: update SPARK_IMAGE_TAG variable
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh variable set SPARK_IMAGE_TAG --body "${{ github.sha }}" --repo "${{ github.repository }}"

@@ -29,7 +29,7 @@ jobs:
       KEYVAULT_NAME: ${{ secrets.KEYVAULT_NAME }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AKS_KUBELET_IDENTITY_CLIENT_ID: ${{ secrets.AKS_KUBELET_IDENTITY_CLIENT_ID }}
-      SPARK_IMAGE_TAG: ${{ vars.SPARK_IMAGE_TAG }}  # set from docker/spark/.current-tag by spark-image.yml
+      SPARK_IMAGE_TAG: ${{ vars.SPARK_IMAGE_TAG }}  # updated by spark-image.yml via gh variable set
 
     steps:
       - uses: actions/checkout@v4
@@ -46,9 +46,6 @@ jobs:
         with:
           resource-group: ${{ secrets.AKS_RESOURCE_GROUP }}
           cluster-name: ${{ secrets.AKS_CLUSTER_NAME }}
-
-      - name: read spark image tag
-        run: echo "SPARK_IMAGE_TAG=$(cat docker/spark/.current-tag)" >> $GITHUB_ENV
 
       - name: add helm repos
         run: |
