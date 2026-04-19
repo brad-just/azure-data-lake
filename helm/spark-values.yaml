@@ -1,4 +1,4 @@
-# Chart: bitnami/spark (appVersion: 4.0.0)
+# Chart: bitnami/spark (appVersion: 3.5.1)
 # Repo:  helm repo add bitnami https://charts.bitnami.com/bitnami
 
 image:

@@ -2,10 +2,10 @@
 
 ## Current state
 > Update this section manually as work progresses.
-- [x] Terraform — initial set up complete, but no integration testing has been completed
-- [ ] Helm values — not started
-- [ ] Spark Docker image — not started
-- [ ] GitHub Actions workflows — not started
+- [x] Terraform — Done
+- [x] Helm values — Done
+- [x] Spark Docker - Done
+- [x] GitHub Actions workflows — Debugging workflows
 
 ---
 
