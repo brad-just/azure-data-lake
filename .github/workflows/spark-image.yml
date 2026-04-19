@@ -35,7 +35,9 @@ jobs:
           docker push "${IMAGE}:${{ github.sha }}"
           docker push "${IMAGE}:latest"
 
-      - name: update SPARK_IMAGE_TAG variable
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh variable set SPARK_IMAGE_TAG --body "${{ github.sha }}" --repo "${{ github.repository }}"
+      - id: tag
+        name: expose image tag
+        run: echo "sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+
+    outputs:
+      image-tag: ${{ steps.tag.outputs.sha }}

@@ -4,10 +4,18 @@ on:
   push:
     branches: [main]
     paths: ['helm/**']
+  workflow_run:
+    workflows: ['Spark Image']
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       service:
         description: 'Service to deploy (leave empty to deploy all in order)'
+        required: false
+        type: string
+      spark_image_tag:
+        description: 'Spark image tag override (leave empty to use latest built SHA)'
         required: false
         type: string
 
@@ -19,6 +27,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: production
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     env:
       # Substituted into values files and secret provider manifests via envsubst
       POSTGRES_FQDN: ${{ secrets.POSTGRES_FQDN }}
@@ -29,7 +38,9 @@ jobs:
       KEYVAULT_NAME: ${{ secrets.KEYVAULT_NAME }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AKS_KUBELET_IDENTITY_CLIENT_ID: ${{ secrets.AKS_KUBELET_IDENTITY_CLIENT_ID }}
-      SPARK_IMAGE_TAG: ${{ vars.SPARK_IMAGE_TAG }}  # updated by spark-image.yml via gh variable set
+      # When triggered by workflow_run, use the SHA from the spark-image build.
+      # When triggered manually, prefer the explicit input, then fall back to the repo variable.
+      SPARK_IMAGE_TAG: ${{ github.event.workflow_run.head_sha || inputs.spark_image_tag || vars.SPARK_IMAGE_TAG }}
 
     steps:
       - uses: actions/checkout@v4
