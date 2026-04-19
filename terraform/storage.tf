@@ -7,7 +7,7 @@ resource "azurerm_storage_account" "adls" {
   account_tier                    = "Standard"
   account_replication_type        = "LRS"
   account_kind                    = "StorageV2"
-  is_hns_enabled                  = true  # hierarchical namespace = ADLS Gen2
+  is_hns_enabled                  = true # hierarchical namespace = ADLS Gen2
   allow_nested_items_to_be_public = false
   # Public access left enabled so Terraform can manage filesystems from outside
   # the VNet. In-cluster traffic uses the private endpoint. Harden for production
