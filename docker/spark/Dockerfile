@@ -1,4 +1,4 @@
-FROM bitnami/spark:4.0.0
+FROM bitnami/spark:3.5.3
 
 USER root
 
@@ -9,20 +9,17 @@ USER root
 #   - iceberg-spark-runtime  → must match Spark major.minor (3.5) and Scala (2.12)
 #   - nessie-spark-extensions → must match Spark major.minor and Nessie server version in nessie-values.yaml
 #   - hadoop-azure            → must match the Hadoop version bundled in the Spark image
-#                               (`hadoop version` inside the container to check)
+#                               (bitnami/spark:3.5.3 bundles Hadoop 3.3.4)
 #   - azure-storage           → dependency of hadoop-azure; check hadoop-azure POM for exact version
 
-# TODO: pin exact versions after verifying against `helm show chart bitnami/spark` appVersion
-# TODO: verify ICEBERG_VERSION at https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-4.0_2.13/
-# TODO: verify NESSIE_VERSION at https://repo1.maven.org/maven2/org/projectnessie/nessie-integrations/nessie-spark-extensions-4.0_2.13/
-# TODO: verify HADOOP_VERSION matches bundled Hadoop in bitnami/spark:4.0.0 — run `hadoop version` inside the container once the image is available
-# TODO: verify AZURE_STORAGE_VERSION is compatible with hadoop-azure — check hadoop-azure POM on Maven Central
+# TODO: verify NESSIE_VERSION matches the Nessie server version in nessie-values.yaml
+# TODO: verify AZURE_STORAGE_VERSION is compatible with hadoop-azure 3.3.4 — check hadoop-azure POM on Maven Central
 ARG ICEBERG_VERSION=1.7.1
 ARG NESSIE_VERSION=0.99.0
-ARG HADOOP_VERSION=3.4.0
+ARG HADOOP_VERSION=3.3.4
 ARG AZURE_STORAGE_VERSION=8.6.6
 
-ARG SPARK_SCALA=4.0_2.13
+ARG SPARK_SCALA=3.5_2.12
 ARG MAVEN=https://repo1.maven.org/maven2
 
 RUN curl -fSL \
