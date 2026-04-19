@@ -1,0 +1,33 @@
+name: "Teardown — Stop Dev Environment"
+
+# WARNING: This workflow stops the AKS cluster and PostgreSQL server to reduce
+# idle costs. It does NOT destroy infrastructure — Terraform state is preserved
+# and the environment can be restarted with scripts/dev-start.sh.
+#
+# For full teardown, run `terraform destroy` manually from your workstation.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  stop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: stop environment
+        env:
+          AKS_CLUSTER_NAME: ${{ secrets.AKS_CLUSTER_NAME }}
+          AKS_RESOURCE_GROUP: ${{ secrets.AKS_RESOURCE_GROUP }}
+          POSTGRES_SERVER_NAME: ${{ secrets.POSTGRES_SERVER_NAME }}
+        run: bash scripts/dev-stop.sh

@@ -1,0 +1,108 @@
+name: Helm Deploy
+
+on:
+  push:
+    branches: [main]
+    paths: ['helm/**']
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to deploy (leave empty to deploy all in order)'
+        required: false
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      # Substituted into values files and secret provider manifests via envsubst
+      POSTGRES_FQDN: ${{ secrets.POSTGRES_FQDN }}
+      POSTGRES_ADMIN_USERNAME: ${{ secrets.POSTGRES_ADMIN_USERNAME }}
+      ADLS_STORAGE_ACCOUNT_NAME: ${{ secrets.ADLS_STORAGE_ACCOUNT_NAME }}
+      BLOB_STORAGE_ACCOUNT_NAME: ${{ secrets.BLOB_STORAGE_ACCOUNT_NAME }}
+      ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
+      KEYVAULT_NAME: ${{ secrets.KEYVAULT_NAME }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AKS_KUBELET_IDENTITY_CLIENT_ID: ${{ secrets.AKS_KUBELET_IDENTITY_CLIENT_ID }}
+      SPARK_IMAGE_TAG: ${{ vars.SPARK_IMAGE_TAG }}  # set from docker/spark/.current-tag by spark-image.yml
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: azure/setup-helm@v4
+
+      - uses: azure/aks-set-context@v3
+        with:
+          resource-group: ${{ secrets.AKS_RESOURCE_GROUP }}
+          cluster-name: ${{ secrets.AKS_CLUSTER_NAME }}
+
+      - name: read spark image tag
+        run: echo "SPARK_IMAGE_TAG=$(cat docker/spark/.current-tag)" >> $GITHUB_ENV
+
+      - name: add helm repos
+        run: |
+          helm repo add projectnessie https://charts.projectnessie.org
+          helm repo add airbyte       https://airbytehq.github.io/helm-charts
+          helm repo add bitnami        https://charts.bitnami.com/bitnami
+          helm repo add trinodb        https://trinodb.github.io/charts
+          helm repo add apache-airflow https://airflow.apache.org
+          helm repo add superset       https://apache.github.io/superset
+          helm repo update
+
+      - name: deploy all services
+        if: ${{ !inputs.service }}
+        run: |
+          deploy() {
+            local svc=$1 chart=$2
+            echo "=== Deploying ${svc} ==="
+            kubectl create namespace "$svc" --dry-run=client -o yaml | kubectl apply -f -
+            if [ -f "helm/${svc}-secret-provider.yaml" ]; then
+              envsubst < "helm/${svc}-secret-provider.yaml" | kubectl apply -f -
+            fi
+            helm upgrade --install "$svc" "$chart" \
+              -f <(envsubst < "helm/${svc}-values.yaml") \
+              --namespace "$svc" --atomic --timeout 5m
+          }
+
+          deploy nessie   projectnessie/nessie
+          deploy airbyte  airbyte/airbyte
+          deploy spark    bitnami/spark
+          deploy trino    trinodb/trino
+          deploy airflow  apache-airflow/airflow
+          deploy superset superset/superset
+
+      - name: deploy single service
+        if: ${{ inputs.service }}
+        run: |
+          declare -A CHARTS=(
+            [nessie]="projectnessie/nessie"
+            [airbyte]="airbyte/airbyte"
+            [spark]="bitnami/spark"
+            [trino]="trinodb/trino"
+            [airflow]="apache-airflow/airflow"
+            [superset]="superset/superset"
+          )
+          svc="${{ inputs.service }}"
+          chart="${CHARTS[$svc]}"
+          if [ -z "$chart" ]; then
+            echo "Unknown service: $svc. Valid values: ${!CHARTS[*]}"
+            exit 1
+          fi
+          kubectl create namespace "$svc" --dry-run=client -o yaml | kubectl apply -f -
+          if [ -f "helm/${svc}-secret-provider.yaml" ]; then
+            envsubst < "helm/${svc}-secret-provider.yaml" | kubectl apply -f -
+          fi
+          helm upgrade --install "$svc" "$chart" \
+            -f <(envsubst < "helm/${svc}-values.yaml") \
+            --namespace "$svc" --atomic --timeout 5m

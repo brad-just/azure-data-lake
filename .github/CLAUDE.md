@@ -39,6 +39,7 @@ The service principal is provisioned by Terraform with a federated credential. T
 | `ADLS_STORAGE_ACCOUNT_NAME` | Manual (from Terraform output `adls_storage_account_name`) | Substituted into Trino values |
 | `BLOB_STORAGE_ACCOUNT_NAME` | Manual (from Terraform output `blob_storage_account_name`) | Substituted into Airbyte values |
 | `SPARK_IMAGE_TAG` | Set by `spark-image.yml` (reads `docker/spark/.current-tag`) | Substituted into Spark values |
+| `POSTGRES_SERVER_NAME` | Manual (from tfvars `project` + `-postgres`) | Used by teardown/start scripts |
 
 ---
 

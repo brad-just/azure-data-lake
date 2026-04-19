@@ -1,0 +1,50 @@
+name: Spark Image
+
+on:
+  push:
+    branches: [main]
+    paths: ['docker/spark/**']
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: write  # required to commit .current-tag back to the repo
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: azure/acr-login@v1
+        with:
+          login-server: ${{ secrets.ACR_LOGIN_SERVER }}
+
+      - name: build and push
+        run: |
+          IMAGE="${{ secrets.ACR_LOGIN_SERVER }}/spark"
+          docker build \
+            -t "${IMAGE}:${{ github.sha }}" \
+            -t "${IMAGE}:latest" \
+            docker/spark/
+          docker push "${IMAGE}:${{ github.sha }}"
+          docker push "${IMAGE}:latest"
+
+      # Write the image SHA so helm-deploy.yml can consume it without hardcoding :latest.
+      # TODO: if tag propagation is handled differently, update helm-deploy.yml to match.
+      - name: write current tag
+        run: echo "${{ github.sha }}" > docker/spark/.current-tag
+
+      - name: commit tag file
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docker/spark/.current-tag
+          git commit -m "ci: update spark image tag to ${{ github.sha }}"
+          git push

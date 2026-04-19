@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  terraform-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: fmt check
+        run: terraform fmt -check -recursive
+        working-directory: terraform
+
+      - name: init (no backend)
+        run: terraform init -backend=false
+        working-directory: terraform
+
+      - name: validate
+        run: terraform validate
+        working-directory: terraform
+
+  helm-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+
+      - name: add chart repos
+        run: |
+          helm repo add projectnessie https://charts.projectnessie.org
+          helm repo add airbyte       https://airbytehq.github.io/helm-charts
+          helm repo add bitnami        https://charts.bitnami.com/bitnami
+          helm repo add trinodb        https://trinodb.github.io/charts
+          helm repo add apache-airflow https://airflow.apache.org
+          helm repo add superset       https://apache.github.io/superset
+          helm repo update
+
+      - name: lint values files
+        # Pull each chart and lint with the corresponding values file.
+        # envsubst variables are replaced with empty strings for syntax checking only.
+        run: |
+          declare -A CHARTS=(
+            [nessie]="projectnessie/nessie"
+            [airbyte]="airbyte/airbyte"
+            [spark]="bitnami/spark"
+            [trino]="trinodb/trino"
+            [airflow]="apache-airflow/airflow"
+            [superset]="superset/superset"
+          )
+          for svc in "${!CHARTS[@]}"; do
+            echo "--- Linting ${svc} ---"
+            helm pull "${CHARTS[$svc]}" --untar --untardir /tmp/charts
+            envsubst < "helm/${svc}-values.yaml" > "/tmp/${svc}-values-resolved.yaml" || true
+            helm lint "/tmp/charts/${svc}" -f "/tmp/${svc}-values-resolved.yaml" || true
+          done
+
+  docker-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: docker/spark/Dockerfile
