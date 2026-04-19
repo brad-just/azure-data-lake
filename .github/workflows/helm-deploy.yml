@@ -75,9 +75,9 @@ jobs:
 
       - name: add helm repos
         run: |
-          helm repo add projectnessie https://charts.projectnessie.org
-          helm repo add airbyte       https://airbytehq.github.io/helm-charts
-          helm repo add bitnami        https://charts.bitnami.com/bitnami
+          helm repo add projectnessie  https://charts.projectnessie.org
+          helm repo add airbyte        https://airbytehq.github.io/helm-charts
+          helm repo add spark-operator https://kubeflow.github.io/spark-operator
           helm repo add trinodb        https://trinodb.github.io/charts
           helm repo add apache-airflow https://airflow.apache.org
           helm repo add superset       https://apache.github.io/superset
@@ -100,7 +100,7 @@ jobs:
 
           deploy nessie   projectnessie/nessie
           deploy airbyte  airbyte/airbyte
-          deploy spark    bitnami/spark
+          deploy spark    spark-operator/spark-operator
           deploy trino    trinodb/trino
           deploy airflow  apache-airflow/airflow
           deploy superset superset/superset
@@ -111,7 +111,7 @@ jobs:
           declare -A CHARTS=(
             [nessie]="projectnessie/nessie"
             [airbyte]="airbyte/airbyte"
-            [spark]="bitnami/spark"
+            [spark]="spark-operator/spark-operator"
             [trino]="trinodb/trino"
             [airflow]="apache-airflow/airflow"
             [superset]="superset/superset"

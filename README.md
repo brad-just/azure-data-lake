@@ -26,7 +26,7 @@ flowchart LR
     end
 
     subgraph compute["Compute"]
-        spark["Apache Spark\ncustom image + Iceberg JARs"]
+        spark["Apache Spark\nspark-operator + custom image"]
         trino["Trino\nIceberg connector"]
     end
 
@@ -74,7 +74,7 @@ flowchart LR
 | Iceberg catalog | Project Nessie |
 | Iceberg data storage | ADLS Gen2 |
 | Service operational storage | Azure Blob Storage (GRS) |
-| Transformations | Apache Spark (AKS, custom image) |
+| Transformations | Apache Spark (spark-operator, on-demand pods) |
 | Query engine | Trino |
 | Visualisation | Apache Superset |
 | Orchestration | Apache Airflow |

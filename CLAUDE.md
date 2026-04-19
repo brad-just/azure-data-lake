@@ -18,7 +18,7 @@
 | Iceberg catalog | Project Nessie |
 | Iceberg data storage | ADLS Gen2 |
 | Service operational storage | Azure Blob Storage (GRS) |
-| Transformations | Apache Spark (standalone, AKS) |
+| Transformations | Apache Spark (spark-operator, AKS) |
 | Query engine | Trino |
 | Visualization | Apache Superset |
 | Orchestration | Apache Airflow |
@@ -71,7 +71,9 @@
 
 **No external Redis** — Superset uses the Redis instance bundled with its Helm chart. Do not provision Azure Cache for Redis.
 
-**Custom Spark image** — the Bitnami Spark base image does not include Iceberg, Nessie, or hadoop-azure JARs. A custom image is built via CI and pushed to ACR. The Spark Helm values must reference this image, not the default Bitnami one.
+**Spark via spark-operator** — Spark runs via the kubeflow spark-operator (chart: `spark-operator/spark-operator`). There is no persistent master/worker cluster; the operator spins up driver and executor pods per job on demand. Airflow submits jobs using `SparkKubernetesOperator` which creates `SparkApplication` CRDs. This avoids any dependency on Bitnami images (which moved to a paid registry in 2025).
+
+**Custom Spark image** — the official `apache/spark` image does not include Iceberg, Nessie catalog, or hadoop-azure JARs. A custom image built from `apache/spark:3.5.3` is built via CI and pushed to ACR. The image tag is passed to Airflow's SparkApplication at runtime via the `SPARK_IMAGE_TAG` workflow variable.
 
 **ADLS Gen2 for Iceberg, Blob Storage for operational data** — ADLS Gen2 (hierarchical namespace enabled) is used for all Iceberg table data. Azure Blob Storage (GRS) is used for Airbyte logs and state only.
 

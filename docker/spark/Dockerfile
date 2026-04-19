@@ -1,4 +1,4 @@
-FROM registry.bitnami.com/bitnami/spark:3.5.1
+FROM apache/spark:3.5.3
 
 USER root
 
@@ -8,7 +8,7 @@ USER root
 # Version alignment rules:
 #   - iceberg-spark-runtime  → must match Spark major.minor (3.5) and Scala (2.12)
 #   - nessie-spark-extensions → must match Spark major.minor and Nessie server version in nessie-values.yaml
-#   - hadoop-azure            → must match the Hadoop version bundled in bitnami/spark:3.5.1 (Hadoop 3.3.4)
+#   - hadoop-azure            → must match the Hadoop version bundled in apache/spark:3.5.3 (Hadoop 3.3.4)
 #   - azure-storage           → dependency of hadoop-azure; check hadoop-azure POM for exact version
 
 # TODO: verify NESSIE_VERSION matches the Nessie server version in nessie-values.yaml
@@ -34,4 +34,4 @@ RUN curl -fSL \
     "${MAVEN}/com/microsoft/azure/azure-storage/${AZURE_STORAGE_VERSION}/azure-storage-${AZURE_STORAGE_VERSION}.jar" \
     -o "${SPARK_HOME}/jars/azure-storage-${AZURE_STORAGE_VERSION}.jar"
 
-USER 1001
+USER spark

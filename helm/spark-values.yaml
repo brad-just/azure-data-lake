@@ -1,45 +1,37 @@
-# Chart: bitnami/spark (appVersion: 3.5.1)
-# Repo:  helm repo add bitnami https://charts.bitnami.com/bitnami
+# Chart: spark-operator/spark-operator
+# Repo:  helm repo add spark-operator https://kubeflow.github.io/spark-operator
+#
+# Installs the spark-operator controller only. Spark jobs are submitted as
+# SparkApplication CRDs by Airflow's SparkKubernetesOperator at runtime —
+# there is no persistent master/worker cluster.
 
-image:
-  registry: "${ACR_LOGIN_SERVER}"
-  repository: spark
-  tag: "${SPARK_IMAGE_TAG}"  # set from docker/spark/.current-tag by spark-image.yml
-  pullPolicy: IfNotPresent
+controller:
+  workers: 2  # TODO: tune concurrent SparkApplication reconcilers for workload
 
-# Master runs on the system node pool (no taint)
-master:
-  resources:
-    requests:
-      cpu: 500m
-      memory: 1Gi     # TODO: tune master memory for workload
-    limits:
-      memory: 2Gi
+# Webhook is required for mounting volumes into driver/executor pods
+# (used by the Secrets Store CSI Driver to inject Key Vault secrets)
+webhook:
+  enable: true
 
-# Workers are scheduled exclusively on the Spark node pool
-worker:
-  replicaCount: 1       # TODO: tune replica count; autoscaler handles burst via node pool scaling
+# Service account used by Spark driver and executor pods.
+# Annotated for AKS workload identity so pods authenticate to ADLS Gen2
+# without static credentials.
+spark:
+  serviceAccount:
+    create: true
+    name: spark
+    annotations:
+      azure.workload.identity/client-id: "${AKS_KUBELET_IDENTITY_CLIENT_ID}"
 
-  resources:
-    requests:
-      cpu: 2
-      memory: 8Gi      # TODO: tune executor memory based on job requirements
-    limits:
-      memory: 16Gi
-
-  nodeSelector:
-    agentpool: spark
-
-  tolerations:
-    - key: dedicated
-      operator: Equal
-      value: spark
-      effect: NoSchedule
-
-  extraEnvVars:
-    # ADLS Gen2 access via AKS workload identity — no static credentials
-    - name: SPARK_HADOOP_FS_AZURE_ACCOUNT_AUTH_TYPE
-      value: OAuth
-    - name: SPARK_HADOOP_FS_AZURE_ACCOUNT_OAUTH_PROVIDER_TYPE
-      value: org.apache.hadoop.fs.azurebfs.oauth2.WorkloadIdentityTokenProvider
-    # TODO: set AZURE_CLIENT_ID annotation on the Spark service account for workload identity
+# SparkApplication template reference — submitted by Airflow at runtime:
+#
+#   image: ${ACR_LOGIN_SERVER}/spark:${SPARK_IMAGE_TAG}
+#   driver.serviceAccount: spark
+#   driver.nodeSelector.agentpool: system
+#   executor.nodeSelector.agentpool: spark
+#   executor.tolerations: [{key: dedicated, value: spark, effect: NoSchedule}]
+#   executor.memory: 8g   # TODO: tune per job
+#   executor.cores: 2     # TODO: tune per job
+#   sparkConf:
+#     spark.hadoop.fs.azure.account.auth.type: OAuth
+#     spark.hadoop.fs.azure.account.oauth.provider.type: org.apache.hadoop.fs.azurebfs.oauth2.WorkloadIdentityTokenProvider

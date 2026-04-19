@@ -28,21 +28,13 @@
 - Key Vault secrets needed: postgres credentials, blob storage connection string
 
 ### Spark (`spark-values.yaml`)
-- Chart: `bitnami/spark`
-- **Do not use the default Bitnami image** — use the custom image from ACR
-  - Image: `<acr-login-server>/spark:<tag>` — leave tag as a placeholder `# TODO: set to image tag output by spark-image.yml`
-- Workers must be scheduled on the Spark node pool:
-  ```yaml
-  worker:
-    nodeSelector:
-      agentpool: spark
-    tolerations:
-      - key: dedicated
-        operator: Equal
-        value: spark
-        effect: NoSchedule
-  ```
-- Leave TODO comments for: executor memory, executor cores, worker replicas
+- Chart: `spark-operator/spark-operator` (`helm repo add spark-operator https://kubeflow.github.io/spark-operator`)
+- Installs the operator controller only — no persistent master/worker cluster
+- Airflow submits jobs via `SparkKubernetesOperator` which creates `SparkApplication` CRDs at runtime
+- The Spark driver and executor pods use a dedicated service account annotated for AKS workload identity
+- Executor pods run on the Spark node pool (`agentpool: spark`, taint `dedicated=spark:NoSchedule`)
+- Image reference (`${ACR_LOGIN_SERVER}/spark:${SPARK_IMAGE_TAG}`) lives in the SparkApplication CRD submitted by Airflow, not in these values
+- Leave TODO comments for: executor memory, executor cores, concurrent reconciler workers
 
 ### Trino (`trino-values.yaml`)
 - Chart: `trinodb/trino`
