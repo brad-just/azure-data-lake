@@ -1,0 +1,45 @@
+# Chart: airbyte/airbyte
+# Repo:  helm repo add airbyte https://airbytehq.github.io/helm-charts
+
+global:
+  # Disable bundled PostgreSQL — use the shared external instance
+  postgresql:
+    enabled: false
+
+  database:
+    type: external
+    host: "${POSTGRES_FQDN}"
+    port: 5432
+    database: airbyte_db
+    existingSecret: airbyte-secrets
+    existingSecretUsernameKey: db-username
+    existingSecretPasswordKey: db-password
+
+  logs:
+    storage:
+      type: azure
+      azure:
+        storageAccountName: "${BLOB_STORAGE_ACCOUNT_NAME}"
+        storageContainerName: airbyte-logs
+        # Authenticate via AKS workload identity — no static connection string
+        # TODO: complete workload identity annotation on the Airbyte service account
+        # storageAccountKey pulled from secret if workload identity is not yet wired
+        existingSecret: airbyte-secrets
+        existingSecretKey: blob-connection-string
+
+  state:
+    storage:
+      type: azure
+      azure:
+        storageAccountName: "${BLOB_STORAGE_ACCOUNT_NAME}"
+        storageContainerName: airbyte-state
+        existingSecret: airbyte-secrets
+        existingSecretKey: blob-connection-string
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    memory: 2Gi
+    

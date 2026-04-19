@@ -1,0 +1,37 @@
+# Chart: superset/superset
+# Repo:  helm repo add superset https://apache.github.io/superset
+
+# Disable bundled PostgreSQL — use the shared external instance
+postgresql:
+  enabled: false
+
+# Use the Redis instance bundled with this chart — do not disable
+redis:
+  enabled: true
+
+externalDatabase:
+  host: "${POSTGRES_FQDN}"
+  port: 5432
+  database: superset_db
+  existingSecret: superset-secrets
+  existingSecretPasswordKey: db-password
+
+configOverrides:
+  secret: |
+    SECRET_KEY = os.environ.get("SUPERSET_SECRET_KEY", "")
+
+extraEnvRaw:
+  - name: SUPERSET_SECRET_KEY
+    valueFrom:
+      secretKeyRef:
+        name: superset-secrets
+        key: superset-secret-key
+  - name: DB_USER
+    value: "${POSTGRES_ADMIN_USERNAME}"
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    memory: 2Gi

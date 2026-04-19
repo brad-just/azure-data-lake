@@ -32,6 +32,13 @@ The service principal is provisioned by Terraform with a federated credential. T
 | `ACR_LOGIN_SERVER` | Manual (from Terraform output `acr_login_server`) | e.g. `mydatalake.azurecr.io` |
 | `AKS_CLUSTER_NAME` | Manual (from Terraform output) | |
 | `AKS_RESOURCE_GROUP` | Manual | |
+| `AKS_KUBELET_IDENTITY_CLIENT_ID` | Manual | `az aks show --query identityProfile.kubeletidentity.clientId` |
+| `KEYVAULT_NAME` | Manual (from tfvars) | Used in SecretProviderClass envsubst |
+| `POSTGRES_FQDN` | Manual (from Terraform output `postgres_fqdn`) | Substituted into values files |
+| `POSTGRES_ADMIN_USERNAME` | Manual (from tfvars) | Substituted into Airflow values |
+| `ADLS_STORAGE_ACCOUNT_NAME` | Manual (from Terraform output `adls_storage_account_name`) | Substituted into Trino values |
+| `BLOB_STORAGE_ACCOUNT_NAME` | Manual (from Terraform output `blob_storage_account_name`) | Substituted into Airbyte values |
+| `SPARK_IMAGE_TAG` | Set by `spark-image.yml` (reads `docker/spark/.current-tag`) | Substituted into Spark values |
 
 ---
 
@@ -65,6 +72,13 @@ Triggers: push to `main` affecting `helm/**`, or `workflow_dispatch` with a `ser
 Jobs:
 - `deploy`:
   - Get AKS credentials: `azure/aks-set-context@v3`
+  - Before applying any `*-secret-provider.yaml`, run `envsubst` to substitute the
+    three placeholders. These must be available as environment variables in the job:
+    - `AKS_KUBELET_IDENTITY_CLIENT_ID` — from GitHub secret `AKS_KUBELET_IDENTITY_CLIENT_ID`
+      (populate with: `az aks show --name <cluster> --resource-group <rg> --query identityProfile.kubeletidentity.clientId -o tsv`)
+    - `KEYVAULT_NAME` — from GitHub secret `KEYVAULT_NAME`
+    - `AZURE_TENANT_ID` — already a required secret
+    - Apply with: `envsubst < helm/<service>-secret-provider.yaml | kubectl apply -f -`
   - If `service` input is set, deploy only that chart
   - Otherwise deploy all charts in dependency order: nessie → airbyte → spark → trino → airflow → superset
   - Each install: `helm upgrade --install <name> <repo>/<chart> -f helm/<name>-values.yaml --atomic --timeout 5m`

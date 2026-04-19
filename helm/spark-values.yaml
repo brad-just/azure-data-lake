@@ -1,0 +1,45 @@
+# Chart: bitnami/spark
+# Repo:  helm repo add bitnami https://charts.bitnami.com/bitnami
+
+image:
+  registry: "${ACR_LOGIN_SERVER}"
+  repository: spark
+  tag: "${SPARK_IMAGE_TAG}"  # set from docker/spark/.current-tag by spark-image.yml
+  pullPolicy: IfNotPresent
+
+# Master runs on the system node pool (no taint)
+master:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi     # TODO: tune master memory for workload
+    limits:
+      memory: 2Gi
+
+# Workers are scheduled exclusively on the Spark node pool
+worker:
+  replicaCount: 1       # TODO: tune replica count; autoscaler handles burst via node pool scaling
+
+  resources:
+    requests:
+      cpu: 2
+      memory: 8Gi      # TODO: tune executor memory based on job requirements
+    limits:
+      memory: 16Gi
+
+  nodeSelector:
+    agentpool: spark
+
+  tolerations:
+    - key: dedicated
+      operator: Equal
+      value: spark
+      effect: NoSchedule
+
+  extraEnvVars:
+    # ADLS Gen2 access via AKS workload identity — no static credentials
+    - name: SPARK_HADOOP_FS_AZURE_ACCOUNT_AUTH_TYPE
+      value: OAuth
+    - name: SPARK_HADOOP_FS_AZURE_ACCOUNT_OAUTH_PROVIDER_TYPE
+      value: org.apache.hadoop.fs.azurebfs.oauth2.WorkloadIdentityTokenProvider
+    # TODO: set AZURE_CLIENT_ID annotation on the Spark service account for workload identity

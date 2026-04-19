@@ -1,0 +1,40 @@
+# Chart: trinodb/trino
+# Repo:  helm repo add trinodb https://trinodb.github.io/charts
+
+coordinator:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi    # TODO: tune coordinator memory
+    limits:
+      memory: 4Gi
+
+worker:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi    # TODO: tune worker memory
+    limits:
+      memory: 4Gi
+
+service:
+  type: ClusterIP
+  port: 8080
+
+# TODO: add ingress with TLS termination for external query access
+# ingress:
+#   enabled: true
+#   host: trino.<your-domain>
+#   tls: []  # TODO: configure cert-manager or Azure-managed cert
+
+additionalCatalogs:
+  iceberg: |
+    connector.name=iceberg
+    iceberg.catalog.type=rest
+    iceberg.rest-catalog.uri=http://nessie.nessie.svc.cluster.local/api/v1
+    iceberg.rest-catalog.prefix=main
+    fs.native-azure.enabled=true
+    azure.auth-type=DEFAULT
+    # TODO: complete ADLS Gen2 workload identity auth config
+    azure.endpoint=https://${ADLS_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net

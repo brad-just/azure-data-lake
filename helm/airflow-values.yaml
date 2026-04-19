@@ -1,0 +1,55 @@
+# Chart: apache-airflow/airflow
+# Repo:  helm repo add apache-airflow https://airflow.apache.org
+
+executor: KubernetesExecutor
+
+# Disable bundled PostgreSQL — use the shared external instance
+postgresql:
+  enabled: false
+
+data:
+  metadataConnection:
+    user: "${POSTGRES_ADMIN_USERNAME}"
+    pass: ""           # injected via existingSecret (airflow-secrets)
+    host: "${POSTGRES_FQDN}"
+    port: 5432
+    db: airflow_db
+    protocol: postgresql
+
+  metadataSecretName: airflow-secrets
+
+fernetKeySecretName: airflow-secrets
+
+# DAG storage — placeholder ConfigMap mount with a single no-op DAG
+# TODO: replace with git-sync sidecar pointing to your DAGs repository
+dags:
+  persistence:
+    enabled: false
+  gitSync:
+    enabled: false  # TODO: enable and configure git-sync for production DAG delivery
+  configMap: airflow-dags-placeholder
+
+# KubernetesExecutor pod template
+workers:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi   # TODO: tune per DAG requirements
+    limits:
+      memory: 1Gi
+
+scheduler:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+
+webserver:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 1Gi

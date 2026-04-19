@@ -1,0 +1,36 @@
+# Chart: projectnessie/nessie
+# Repo:  helm repo add projectnessie https://charts.projectnessie.org
+
+service:
+  type: ClusterIP
+  port: 19120
+
+versionStoreConfig:
+  storageType: JDBC
+
+# JDBC datasource — credentials injected from the CSI-provisioned secret.
+# The secret (nessie-secrets) is mounted by the SecretProviderClass in
+# nessie-secret-provider.yaml and projected as a Kubernetes secret.
+extraEnv:
+  - name: QUARKUS_DATASOURCE_JDBC_URL
+    valueFrom:
+      secretKeyRef:
+        name: nessie-secrets
+        key: jdbc-url
+  - name: QUARKUS_DATASOURCE_USERNAME
+    valueFrom:
+      secretKeyRef:
+        name: nessie-secrets
+        key: db-username
+  - name: QUARKUS_DATASOURCE_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: nessie-secrets
+        key: db-password
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 1Gi
