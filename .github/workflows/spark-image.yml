@@ -9,7 +9,6 @@ on:
 permissions:
   id-token: write
   contents: read
-  variables: write  # required to update SPARK_IMAGE_TAG repo variable
 
 jobs:
   build-and-push:
