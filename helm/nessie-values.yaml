@@ -18,15 +18,28 @@ extraEnv:
         name: nessie-secrets
         key: jdbc-url
   - name: QUARKUS_DATASOURCE_USERNAME
-    valueFrom:
-      secretKeyRef:
-        name: nessie-secrets
-        key: db-username
+    value: "${POSTGRES_ADMIN_USERNAME}"
   - name: QUARKUS_DATASOURCE_PASSWORD
     valueFrom:
       secretKeyRef:
         name: nessie-secrets
         key: db-password
+
+# Volume mount is required — the CSI driver only creates the nessie-secrets
+# Kubernetes secret when a pod mounts this volume. Without it the secretKeyRef
+# env vars above will fail to resolve and the pod will not start.
+extraVolumes:
+  - name: secrets-store
+    csi:
+      driver: secrets-store.csi.k8s.io
+      readOnly: true
+      volumeAttributes:
+        secretProviderClass: nessie-secrets
+
+extraVolumeMounts:
+  - name: secrets-store
+    mountPath: /mnt/secrets-store
+    readOnly: true
 
 resources:
   requests:

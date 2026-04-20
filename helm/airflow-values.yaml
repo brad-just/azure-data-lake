@@ -45,6 +45,19 @@ scheduler:
       memory: 512Mi
     limits:
       memory: 1Gi
+  # Mount the CSI volume so the driver creates the airflow-secrets Kubernetes
+  # secret before the scheduler process starts and reads fernetKeySecretName.
+  extraVolumes:
+    - name: secrets-store
+      csi:
+        driver: secrets-store.csi.k8s.io
+        readOnly: true
+        volumeAttributes:
+          secretProviderClass: airflow-secrets
+  extraVolumeMounts:
+    - name: secrets-store
+      mountPath: /mnt/secrets-store
+      readOnly: true
 
 webserver:
   resources:
@@ -53,3 +66,14 @@ webserver:
       memory: 512Mi
     limits:
       memory: 1Gi
+  extraVolumes:
+    - name: secrets-store
+      csi:
+        driver: secrets-store.csi.k8s.io
+        readOnly: true
+        volumeAttributes:
+          secretProviderClass: airflow-secrets
+  extraVolumeMounts:
+    - name: secrets-store
+      mountPath: /mnt/secrets-store
+      readOnly: true
