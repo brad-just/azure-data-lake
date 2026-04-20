@@ -42,19 +42,4 @@ resources:
     memory: 1Gi
   limits:
     memory: 2Gi
-
-# Mount the CSI volume on every Airbyte pod so the driver creates the
-# airbyte-secrets Kubernetes secret before any component reads existingSecret.
-global:
-  extraVolumes:
-    - name: secrets-store
-      csi:
-        driver: secrets-store.csi.k8s.io
-        readOnly: true
-        volumeAttributes:
-          secretProviderClass: airbyte-secrets
-  extraVolumeMounts:
-    - name: secrets-store
-      mountPath: /mnt/secrets-store
-      readOnly: true
     

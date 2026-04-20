@@ -86,12 +86,28 @@ jobs:
       - name: deploy all services
         if: ${{ !inputs.service }}
         run: |
+          bootstrap_secrets() {
+            local svc=$1
+            [ -f "helm/${svc}-secret-provider.yaml" ] || return 0
+            # Run a short-lived pod that mounts the CSI volume. The Secrets Store
+            # CSI driver creates the Kubernetes secret during volume mounting, so
+            # it exists before any chart pod starts and reads it via secretKeyRef
+            # or existingSecret. Pod is deleted immediately after.
+            SVC="${svc}" envsubst '${SVC}' < helm/secret-init-pod.yaml \
+              | kubectl apply -n "${svc}" -f -
+            kubectl wait pod/secret-init -n "${svc}" \
+              --for=jsonpath='{.status.phase}'=Succeeded \
+              --timeout=90s
+            kubectl delete pod secret-init -n "${svc}" --ignore-not-found
+          }
+
           deploy() {
             local svc=$1 chart=$2
             echo "=== Deploying ${svc} ==="
             kubectl create namespace "$svc" --dry-run=client -o yaml | kubectl apply -f -
             if [ -f "helm/${svc}-secret-provider.yaml" ]; then
               envsubst < "helm/${svc}-secret-provider.yaml" | kubectl apply -f -
+              bootstrap_secrets "$svc"
             fi
             helm upgrade --install "$svc" "$chart" \
               -f <(envsubst < "helm/${svc}-values.yaml") \
@@ -125,6 +141,12 @@ jobs:
           kubectl create namespace "$svc" --dry-run=client -o yaml | kubectl apply -f -
           if [ -f "helm/${svc}-secret-provider.yaml" ]; then
             envsubst < "helm/${svc}-secret-provider.yaml" | kubectl apply -f -
+            SVC="${svc}" envsubst '${SVC}' < helm/secret-init-pod.yaml \
+              | kubectl apply -n "${svc}" -f -
+            kubectl wait pod/secret-init -n "${svc}" \
+              --for=jsonpath='{.status.phase}'=Succeeded \
+              --timeout=90s
+            kubectl delete pod secret-init -n "${svc}" --ignore-not-found
           fi
           helm upgrade --install "$svc" "$chart" \
             -f <(envsubst < "helm/${svc}-values.yaml") \
