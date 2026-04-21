@@ -23,3 +23,13 @@ resource "azurerm_role_assignment" "keyvault_terraform_admin" {
   role_definition_name = "Key Vault Administrator"
   principal_id         = data.azurerm_client_config.current.object_id
 }
+
+# Grant developer accounts Secrets Officer so they can read/write secrets
+# without needing full Administrator. Add object IDs to keyvault_admin_object_ids
+# in tfvars: run `az ad signed-in-user show --query id -o tsv` to find yours.
+resource "azurerm_role_assignment" "keyvault_admin_users" {
+  for_each             = toset(var.keyvault_admin_object_ids)
+  scope                = azurerm_key_vault.main.id
+  role_definition_name = "Key Vault Secrets Officer"
+  principal_id         = each.value
+}

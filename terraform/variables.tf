@@ -68,6 +68,12 @@ variable "keyvault_name" {
   type        = string
 }
 
+variable "keyvault_admin_object_ids" {
+  description = "List of Azure AD object IDs granted Key Vault Secrets Officer (e.g. developer accounts). The Terraform execution identity is always granted Administrator separately."
+  type        = list(string)
+  default     = []
+}
+
 # ── Database ─────────────────────────────────────────────────────────────────
 
 variable "postgres_admin_username" {

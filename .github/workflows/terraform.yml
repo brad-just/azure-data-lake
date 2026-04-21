@@ -67,7 +67,8 @@ jobs:
             -var="postgres_admin_username=${{ secrets.POSTGRES_ADMIN_USERNAME }}" \
             -var="github_org=${{ secrets.TF_GITHUB_ORG }}" \
             -var="github_repo=${{ secrets.TF_GITHUB_REPO }}" \
-            -var="api_server_authorized_ip_ranges=[\"${{ secrets.TF_API_SERVER_IP_RANGES }}\"]"
+            -var="api_server_authorized_ip_ranges=[\"${{ secrets.TF_API_SERVER_IP_RANGES }}\"]" \
+            -var='keyvault_admin_object_ids=["${{ secrets.TF_KEYVAULT_ADMIN_OBJECT_IDS }}"]'
         working-directory: terraform
 
       - uses: actions/upload-artifact@v4

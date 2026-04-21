@@ -156,10 +156,19 @@ BLOB_KEY=$(az storage account keys list \
 az keyvault secret set --vault-name $KV --name blob-connection-string \
   --value "DefaultEndpointsProtocol=https;AccountName=${BLOB_ACCOUNT};AccountKey=${BLOB_KEY};EndpointSuffix=core.windows.net"
 
+# Postgres admin username (used by Airbyte via secret, others use it as a plain env var)
+PG_USER=<your-postgres-admin-username>
+az keyvault secret set --vault-name $KV --name postgres-admin-username --value $PG_USER
+
 # Nessie JDBC URL
 FQDN=$(cd terraform && terraform output -raw postgres_fqdn)
 az keyvault secret set --vault-name $KV --name nessie-jdbc-url \
   --value "jdbc:postgresql://${FQDN}/nessie_db?sslmode=require"
+
+# Airflow DB URI — metadataSecretName expects a full SQLAlchemy connection URI
+PG_PASS=$(az keyvault secret show --vault-name $KV --name postgres-admin-password --query value -o tsv)
+az keyvault secret set --vault-name $KV --name airflow-db-uri \
+  --value "postgresql+psycopg2://${PG_USER}:${PG_PASS}@${FQDN}:5432/airflow_db?sslmode=require"
 
 # Superset secret key
 az keyvault secret set --vault-name $KV --name superset-secret-key \

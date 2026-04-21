@@ -40,6 +40,7 @@ The service principal is provisioned by Terraform with a federated credential. T
 | `BLOB_STORAGE_ACCOUNT_NAME` | Manual (from Terraform output `blob_storage_account_name`) | Substituted into Airbyte values |
 | `SPARK_IMAGE_TAG` | Set by `spark-image.yml` (reads `docker/spark/.current-tag`) | Substituted into Spark values |
 | `POSTGRES_SERVER_NAME` | Manual (from tfvars `project` + `-postgres`) | Used by teardown/start scripts |
+| `TF_KEYVAULT_ADMIN_OBJECT_IDS` | Manual (`az ad signed-in-user show --query id -o tsv`) | Grants Key Vault Secrets Officer to developer accounts |
 
 ---
 
