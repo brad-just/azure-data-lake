@@ -13,6 +13,7 @@ global:
     host: "${POSTGRES_FQDN}"
     port: 5432
     database: airbyte_db
+    user: "${POSTGRES_ADMIN_USERNAME}"
     existingSecret: airbyte-secrets
     existingSecretUsernameKey: db-username
     existingSecretPasswordKey: db-password
