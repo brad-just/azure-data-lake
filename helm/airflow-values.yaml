@@ -8,14 +8,9 @@ postgresql:
   enabled: false
 
 data:
-  metadataConnection:
-    user: "${POSTGRES_ADMIN_USERNAME}"
-    pass: ""           # injected via existingSecret (airflow-secrets)
-    host: "${POSTGRES_FQDN}"
-    port: 5432
-    db: airflow_db
-    protocol: postgresql
-
+  # Full SQLAlchemy URI is stored in Key Vault as airflow-db-uri and mapped
+  # to the 'connection' key in airflow-secrets by the SecretProviderClass.
+  # metadataSecretName expects exactly this key name.
   metadataSecretName: airflow-secrets
 
 fernetKeySecretName: airflow-secrets

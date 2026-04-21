@@ -12,6 +12,7 @@ redis:
 externalDatabase:
   host: "${POSTGRES_FQDN}"
   port: 5432
+  user: "${POSTGRES_ADMIN_USERNAME}"
   database: superset_db
   existingSecret: superset-secrets
   existingSecretPasswordKey: db-password
@@ -26,8 +27,6 @@ extraEnvRaw:
       secretKeyRef:
         name: superset-secrets
         key: superset-secret-key
-  - name: DB_USER
-    value: "${POSTGRES_ADMIN_USERNAME}"
 
 resources:
   requests:
