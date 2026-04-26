@@ -102,7 +102,7 @@ jobs:
           }
 
           deploy() {
-            local svc=$1 chart=$2
+            local svc=$1 chart=$2 timeout=$3
             echo "=== Deploying ${svc} ==="
             kubectl create namespace "$svc" --dry-run=client -o yaml | kubectl apply -f -
             if [ -f "helm/${svc}-secret-provider.yaml" ]; then
@@ -111,15 +111,15 @@ jobs:
             fi
             helm upgrade --install "$svc" "$chart" \
               -f <(envsubst < "helm/${svc}-values.yaml") \
-              --namespace "$svc" --atomic --timeout 5m
+              --namespace "$svc" --atomic --timeout "$timeout"
           }
 
-          deploy nessie   projectnessie/nessie
-          deploy airbyte  airbyte/airbyte
-          deploy spark    spark-operator/spark-operator
-          deploy trino    trinodb/trino
-          deploy airflow  apache-airflow/airflow
-          deploy superset superset/superset
+          deploy nessie   projectnessie/nessie         5m
+          deploy airbyte  airbyte/airbyte               15m
+          deploy spark    spark-operator/spark-operator 5m
+          deploy trino    trinodb/trino                 5m
+          deploy airflow  apache-airflow/airflow        5m
+          deploy superset superset/superset             5m
 
       - name: deploy single service
         if: ${{ inputs.service }}
@@ -148,9 +148,11 @@ jobs:
               --timeout=90s
             kubectl delete pod secret-init -n "${svc}" --ignore-not-found
           fi
+          declare -A TIMEOUTS=([airbyte]="15m")
+          timeout="${TIMEOUTS[$svc]:-5m}"
           helm upgrade --install "$svc" "$chart" \
             -f <(envsubst < "helm/${svc}-values.yaml") \
-            --namespace "$svc" --atomic --timeout 5m
+            --namespace "$svc" --atomic --timeout "$timeout"
 
       - name: remove runner IP from AKS authorized ranges
         if: always()
