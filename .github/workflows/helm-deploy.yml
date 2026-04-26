@@ -110,16 +110,16 @@ jobs:
           bootstrap_secrets() {
             local svc=$1
             [ -f "helm/${svc}-secret-provider.yaml" ] || return 0
-            # Run a short-lived pod that mounts the CSI volume. The Secrets Store
-            # CSI driver creates the Kubernetes secret during volume mounting, so
-            # it exists before any chart pod starts and reads it via secretKeyRef
-            # or existingSecret. Pod is deleted immediately after.
+            # Mount the CSI volume to trigger K8s secret creation, then wait.
+            # The pod is intentionally NOT deleted here — the CSI driver removes
+            # the K8s secret as soon as no pod is mounting the volume. The pod
+            # must stay alive until helm install completes and chart pods take
+            # over the mount. deploy() deletes it after helm finishes.
             SVC="${svc}" envsubst '${SVC}' < helm/secret-init-pod.yaml \
               | kubectl apply -n "${svc}" -f -
             kubectl wait pod/secret-init -n "${svc}" \
               --for=jsonpath='{.status.phase}'=Succeeded \
               --timeout=90s
-            kubectl delete pod secret-init -n "${svc}" --ignore-not-found
           }
 
           recover_release() {
@@ -157,10 +157,17 @@ jobs:
               envsubst < "helm/${svc}-secret-provider.yaml" | kubectl apply -f -
               bootstrap_secrets "$svc"
             fi
+            set +e
             helm upgrade --install "$svc" "$chart" \
               --version "$version" \
               -f <(envsubst < "helm/${svc}-values.yaml") \
               --namespace "$svc" --atomic --cleanup-on-fail --timeout "$timeout"
+            local helm_rc=$?
+            set -e
+            # Delete the bootstrap pod now that chart pods are running and mounting
+            # the CSI volume themselves (keeping the K8s secret alive going forward).
+            kubectl delete pod secret-init -n "$svc" --ignore-not-found 2>/dev/null || true
+            return $helm_rc
           }
 
           # Read pinned versions from helm/chart-versions.yaml
@@ -222,14 +229,19 @@ jobs:
             kubectl wait pod/secret-init -n "${svc}" \
               --for=jsonpath='{.status.phase}'=Succeeded \
               --timeout=90s
-            kubectl delete pod secret-init -n "${svc}" --ignore-not-found
+            # Pod intentionally kept alive until after helm install — see bootstrap_secrets comment.
           fi
           declare -A TIMEOUTS=([airbyte]="10m")
           timeout="${TIMEOUTS[$svc]:-5m}"
+          set +e
           helm upgrade --install "$svc" "$chart" \
             --version "$version" \
             -f <(envsubst < "helm/${svc}-values.yaml") \
             --namespace "$svc" --atomic --cleanup-on-fail --timeout "$timeout"
+          helm_rc=$?
+          set -e
+          kubectl delete pod secret-init -n "$svc" --ignore-not-found 2>/dev/null || true
+          exit $helm_rc
 
       - name: remove runner IP from AKS authorized ranges
         if: always()
