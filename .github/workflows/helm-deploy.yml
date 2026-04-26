@@ -105,6 +105,11 @@ jobs:
             local svc=$1 chart=$2 timeout=$3
             echo "=== Deploying ${svc} ==="
             kubectl create namespace "$svc" --dry-run=client -o yaml | kubectl apply -f -
+            # Force-delete pods stuck in Terminating for more than 2 minutes.
+            # Pods still within their grace period are left alone to shut down cleanly.
+            kubectl get pods -n "$svc" -o json \
+              | jq -r '.items[] | select(.metadata.deletionTimestamp != null) | select((now - (.metadata.deletionTimestamp | fromdateiso8601)) > 120) | .metadata.name' \
+              | xargs -r kubectl delete pod -n "$svc" --force --grace-period=0
             if [ -f "helm/${svc}-secret-provider.yaml" ]; then
               envsubst < "helm/${svc}-secret-provider.yaml" | kubectl apply -f -
               bootstrap_secrets "$svc"
@@ -114,7 +119,7 @@ jobs:
               --namespace "$svc" --atomic --timeout "$timeout"
           }
 
-          deploy nessie   projectnessie/nessie         5m
+          deploy nessie   projectnessie/nessie         10m
           deploy airbyte  airbyte/airbyte               15m
           deploy spark    spark-operator/spark-operator 5m
           deploy trino    trinodb/trino                 5m
@@ -139,6 +144,8 @@ jobs:
             exit 1
           fi
           kubectl create namespace "$svc" --dry-run=client -o yaml | kubectl apply -f -
+          kubectl get pods -n "$svc" | awk '/Terminating/{print $1}' \
+            | xargs -r kubectl delete pod -n "$svc" --force --grace-period=0
           if [ -f "helm/${svc}-secret-provider.yaml" ]; then
             envsubst < "helm/${svc}-secret-provider.yaml" | kubectl apply -f -
             SVC="${svc}" envsubst '${SVC}' < helm/secret-init-pod.yaml \
@@ -148,7 +155,7 @@ jobs:
               --timeout=90s
             kubectl delete pod secret-init -n "${svc}" --ignore-not-found
           fi
-          declare -A TIMEOUTS=([airbyte]="15m")
+          declare -A TIMEOUTS=([airbyte]="15m" [nessie]="10m")
           timeout="${TIMEOUTS[$svc]:-5m}"
           helm upgrade --install "$svc" "$chart" \
             -f <(envsubst < "helm/${svc}-values.yaml") \
