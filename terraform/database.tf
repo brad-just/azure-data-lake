@@ -38,6 +38,15 @@ resource "azurerm_postgresql_flexible_server" "main" {
   }
 }
 
+# btree_gin is required by Temporal (bundled with Airbyte). Azure PostgreSQL
+# Flexible Server blocks extensions by default — they must be allowlisted here
+# before any client can run CREATE EXTENSION.
+resource "azurerm_postgresql_flexible_server_configuration" "extensions" {
+  name      = "azure.extensions"
+  server_id = azurerm_postgresql_flexible_server.main.id
+  value     = "BTREE_GIN"
+}
+
 resource "azurerm_postgresql_flexible_server_database" "airbyte" {
   name      = "airbyte_db"
   server_id = azurerm_postgresql_flexible_server.main.id
