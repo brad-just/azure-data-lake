@@ -47,4 +47,38 @@ resources:
     memory: 1Gi
   limits:
     memory: 2Gi
-    
+
+# JVM startup on a cold node takes longer than the chart defaults allow.
+# Raise initialDelaySeconds and failureThreshold so pods aren't killed
+# mid-startup and don't trigger a restart loop during helm install.
+server:
+  livenessProbe:
+    initialDelaySeconds: 120
+    failureThreshold: 6
+  readinessProbe:
+    initialDelaySeconds: 90
+    failureThreshold: 6
+
+worker:
+  livenessProbe:
+    initialDelaySeconds: 120
+    failureThreshold: 6
+  readinessProbe:
+    initialDelaySeconds: 90
+    failureThreshold: 6
+
+workload-api-server:
+  livenessProbe:
+    initialDelaySeconds: 120
+    failureThreshold: 6
+  readinessProbe:
+    initialDelaySeconds: 90
+    failureThreshold: 6
+
+workload-launcher:
+  livenessProbe:
+    initialDelaySeconds: 120
+    failureThreshold: 6
+  readinessProbe:
+    initialDelaySeconds: 90
+    failureThreshold: 6
