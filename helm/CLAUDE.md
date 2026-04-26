@@ -7,7 +7,8 @@
 ## General rules
 
 - One values file per service under `helm/`
-- All Helm installs use `--atomic --timeout 5m`
+- All Helm installs use `--atomic --cleanup-on-fail --timeout 5m` (Airbyte uses `--timeout 15m`)
+- Chart versions are pinned in `helm/chart-versions.yaml` — never let `helm repo update` silently upgrade a chart. To upgrade: bump the version in that file and open a PR.
 - Secrets are never in values files — they come from Kubernetes secrets provisioned by the Secrets Store CSI Driver from Key Vault
 - Reference the CSI-provisioned secret name in values using `existingSecret` or equivalent chart parameter
 

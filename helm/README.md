@@ -12,7 +12,7 @@ Azure Key Vault at pod startup via the Secrets Store CSI Driver.
 |---|---|---|---|
 | Nessie | `projectnessie/nessie` | `nessie` | Iceberg REST catalog (backed by PostgreSQL) |
 | Airbyte | `airbyte/airbyte` | `airbyte` | Data ingestion |
-| Spark | `bitnami/spark` | `spark` | Batch transformations (custom image from ACR) |
+| Spark | `spark-operator/spark-operator` | `spark` | Spark operator (custom image from ACR via SparkApplication CRDs) |
 | Trino | `trinodb/trino` | `trino` | Interactive query over Iceberg tables |
 | Airflow | `apache-airflow/airflow` | `airflow` | Orchestration (KubernetesExecutor) |
 | Superset | `superset/superset` | `superset` | Visualisation |
@@ -37,14 +37,25 @@ Nessie → Airbyte → Spark → Trino → Airflow → Superset
 Add all chart repositories once:
 
 ```bash
-helm repo add projectnessie https://charts.projectnessie.org
-helm repo add airbyte       https://airbytehq.github.io/helm-charts
-helm repo add bitnami        https://charts.bitnami.com/bitnami
+helm repo add projectnessie  https://charts.projectnessie.org
+helm repo add airbyte        https://airbytehq.github.io/helm-charts
+helm repo add spark-operator https://kubeflow.github.io/spark-operator
 helm repo add trinodb        https://trinodb.github.io/charts
 helm repo add apache-airflow https://airflow.apache.org
 helm repo add superset       https://apache.github.io/superset
 helm repo update
 ```
+
+### Chart versions
+
+All chart versions are pinned in [`chart-versions.yaml`](chart-versions.yaml). The
+`helm-deploy.yml` workflow reads this file — chart upgrades are explicit PR changes,
+not silent surprises from `helm repo update`.
+
+To upgrade a chart:
+1. Run `helm search repo <repo>/<chart> --versions | head -5` to find the new version
+2. Update the version in `chart-versions.yaml`
+3. Open a PR — CI will lint; merge triggers the deploy workflow
 
 ---
 
@@ -122,57 +133,74 @@ export ACR_LOGIN_SERVER=<your-acr-login-server>  # from `terraform output acr_lo
 
 ### Deploy all services (full stack)
 
+Read versions from `chart-versions.yaml` first:
+
 ```bash
+nessie_ver=$(yq '.nessie'   helm/chart-versions.yaml)
+airbyte_ver=$(yq '.airbyte' helm/chart-versions.yaml)
+spark_ver=$(yq '.spark'     helm/chart-versions.yaml)
+trino_ver=$(yq '.trino'     helm/chart-versions.yaml)
+airflow_ver=$(yq '.airflow' helm/chart-versions.yaml)
+superset_ver=$(yq '.superset' helm/chart-versions.yaml)
+
 # Nessie
 kubectl create namespace nessie --dry-run=client -o yaml | kubectl apply -f -
 envsubst < helm/nessie-secret-provider.yaml | kubectl apply -f -
 helm upgrade --install nessie projectnessie/nessie \
+  --version "$nessie_ver" \
   -f <(envsubst < helm/nessie-values.yaml) \
-  --namespace nessie --atomic --timeout 5m
+  --namespace nessie --atomic --cleanup-on-fail --timeout 5m
 
 # Airbyte
 kubectl create namespace airbyte --dry-run=client -o yaml | kubectl apply -f -
 envsubst < helm/airbyte-secret-provider.yaml | kubectl apply -f -
 helm upgrade --install airbyte airbyte/airbyte \
+  --version "$airbyte_ver" \
   -f <(envsubst < helm/airbyte-values.yaml) \
-  --namespace airbyte --atomic --timeout 5m
+  --namespace airbyte --atomic --cleanup-on-fail --timeout 15m
 
 # Spark
 kubectl create namespace spark --dry-run=client -o yaml | kubectl apply -f -
-helm upgrade --install spark bitnami/spark \
+helm upgrade --install spark spark-operator/spark-operator \
+  --version "$spark_ver" \
   -f <(envsubst < helm/spark-values.yaml) \
-  --namespace spark --atomic --timeout 5m
+  --namespace spark --atomic --cleanup-on-fail --timeout 5m
 
 # Trino
 kubectl create namespace trino --dry-run=client -o yaml | kubectl apply -f -
 helm upgrade --install trino trinodb/trino \
+  --version "$trino_ver" \
   -f <(envsubst < helm/trino-values.yaml) \
-  --namespace trino --atomic --timeout 5m
+  --namespace trino --atomic --cleanup-on-fail --timeout 5m
 
 # Airflow
 kubectl create namespace airflow --dry-run=client -o yaml | kubectl apply -f -
 envsubst < helm/airflow-secret-provider.yaml | kubectl apply -f -
 helm upgrade --install airflow apache-airflow/airflow \
+  --version "$airflow_ver" \
   -f <(envsubst < helm/airflow-values.yaml) \
-  --namespace airflow --atomic --timeout 5m
+  --namespace airflow --atomic --cleanup-on-fail --timeout 5m
 
 # Superset
 kubectl create namespace superset --dry-run=client -o yaml | kubectl apply -f -
 envsubst < helm/superset-secret-provider.yaml | kubectl apply -f -
 helm upgrade --install superset superset/superset \
+  --version "$superset_ver" \
   -f <(envsubst < helm/superset-values.yaml) \
-  --namespace superset --atomic --timeout 5m
+  --namespace superset --atomic --cleanup-on-fail --timeout 5m
 ```
 
 ### Deploy a single service
 
 ```bash
 SERVICE=nessie  # change as needed
+VERSION=$(yq ".${SERVICE}" helm/chart-versions.yaml)
 kubectl create namespace $SERVICE --dry-run=client -o yaml | kubectl apply -f -
 envsubst < helm/${SERVICE}-secret-provider.yaml | kubectl apply -f -
 helm upgrade --install $SERVICE <repo>/$SERVICE \
-  -f helm/${SERVICE}-values.yaml \
-  --namespace $SERVICE --atomic --timeout 5m
+  --version "$VERSION" \
+  -f <(envsubst < helm/${SERVICE}-values.yaml) \
+  --namespace $SERVICE --atomic --cleanup-on-fail --timeout 5m
 ```
 
 CI/CD (`helm-deploy.yml`) handles this automatically — see `.github/CLAUDE.md`.

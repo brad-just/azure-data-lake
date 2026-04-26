@@ -23,6 +23,10 @@ permissions:
   id-token: write
   contents: read
 
+concurrency:
+  group: helm-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -73,6 +77,23 @@ jobs:
           resource-group: ${{ secrets.AKS_RESOURCE_GROUP }}
           cluster-name: ${{ secrets.AKS_CLUSTER_NAME }}
 
+      - name: pre-flight node readiness check
+        run: |
+          echo "Waiting for all nodes to be Ready..."
+          for i in $(seq 1 24); do
+            NOT_READY=$(kubectl get nodes --no-headers 2>/dev/null \
+              | awk '$2 != "Ready" {print $1}')
+            if [ -z "$NOT_READY" ]; then
+              echo "All nodes are Ready."
+              exit 0
+            fi
+            echo "Not-ready nodes: $NOT_READY — waiting 15s (attempt $i/24)"
+            sleep 15
+          done
+          echo "Timed out waiting for nodes to become Ready."
+          kubectl get nodes
+          exit 1
+
       - name: add helm repos
         run: |
           helm repo add projectnessie  https://charts.projectnessie.org
@@ -101,8 +122,29 @@ jobs:
             kubectl delete pod secret-init -n "${svc}" --ignore-not-found
           }
 
+          recover_release() {
+            local svc=$1
+            local status
+            status=$(helm status "$svc" -n "$svc" --output json 2>/dev/null | jq -r '.info.status' 2>/dev/null || echo "not-installed")
+            case "$status" in
+              pending-upgrade|pending-install|pending-rollback)
+                echo "Release ${svc} is stuck in ${status} — rolling back"
+                helm rollback "$svc" -n "$svc" --wait --timeout 2m || \
+                  helm uninstall "$svc" -n "$svc" --wait --timeout 2m || true
+                ;;
+              failed)
+                echo "Release ${svc} is in failed state — rolling back"
+                helm rollback "$svc" -n "$svc" --wait --timeout 2m || \
+                  helm uninstall "$svc" -n "$svc" --wait --timeout 2m || true
+                ;;
+              *)
+                echo "Release ${svc} status: ${status}"
+                ;;
+            esac
+          }
+
           deploy() {
-            local svc=$1 chart=$2 timeout=$3
+            local svc=$1 chart=$2 version=$3 timeout=$4
             echo "=== Deploying ${svc} ==="
             kubectl create namespace "$svc" --dry-run=client -o yaml | kubectl apply -f -
             # Force-delete pods stuck in Terminating for more than 2 minutes.
@@ -110,21 +152,32 @@ jobs:
             kubectl get pods -n "$svc" -o json \
               | jq -r '.items[] | select(.metadata.deletionTimestamp != null) | select((now - (.metadata.deletionTimestamp | fromdateiso8601)) > 120) | .metadata.name' \
               | xargs -r kubectl delete pod -n "$svc" --force --grace-period=0
+            recover_release "$svc"
             if [ -f "helm/${svc}-secret-provider.yaml" ]; then
               envsubst < "helm/${svc}-secret-provider.yaml" | kubectl apply -f -
               bootstrap_secrets "$svc"
             fi
             helm upgrade --install "$svc" "$chart" \
+              --version "$version" \
               -f <(envsubst < "helm/${svc}-values.yaml") \
-              --namespace "$svc" --atomic --timeout "$timeout"
+              --namespace "$svc" --atomic --cleanup-on-fail --timeout "$timeout"
           }
 
-          deploy nessie   projectnessie/nessie         10m
-          deploy airbyte  airbyte/airbyte               15m
-          deploy spark    spark-operator/spark-operator 5m
-          deploy trino    trinodb/trino                 5m
-          deploy airflow  apache-airflow/airflow        5m
-          deploy superset superset/superset             5m
+          # Read pinned versions from helm/chart-versions.yaml
+          nessie_ver=$(yq   '.nessie'   helm/chart-versions.yaml)
+          airbyte_ver=$(yq  '.airbyte'  helm/chart-versions.yaml)
+          spark_ver=$(yq    '.spark'    helm/chart-versions.yaml)
+          trino_ver=$(yq    '.trino'    helm/chart-versions.yaml)
+          airflow_ver=$(yq  '.airflow'  helm/chart-versions.yaml)
+          superset_ver=$(yq '.superset' helm/chart-versions.yaml)
+
+          #                svc      chart                          version        timeout
+          deploy nessie   projectnessie/nessie         "$nessie_ver"   5m
+          deploy airbyte  airbyte/airbyte               "$airbyte_ver"  15m
+          deploy spark    spark-operator/spark-operator "$spark_ver"    5m
+          deploy trino    trinodb/trino                 "$trino_ver"    5m
+          deploy airflow  apache-airflow/airflow        "$airflow_ver"  5m
+          deploy superset superset/superset             "$superset_ver" 5m
 
       - name: deploy single service
         if: ${{ inputs.service }}
@@ -137,6 +190,12 @@ jobs:
             [airflow]="apache-airflow/airflow"
             [superset]="superset/superset"
           )
+          # Read pinned version from helm/chart-versions.yaml
+          version=$(yq ".${svc}" helm/chart-versions.yaml)
+          if [ -z "$version" ] || [ "$version" = "null" ]; then
+            echo "No pinned version found for ${svc} in helm/chart-versions.yaml"
+            exit 1
+          fi
           svc="${{ inputs.service }}"
           chart="${CHARTS[$svc]}"
           if [ -z "$chart" ]; then
@@ -144,8 +203,18 @@ jobs:
             exit 1
           fi
           kubectl create namespace "$svc" --dry-run=client -o yaml | kubectl apply -f -
-          kubectl get pods -n "$svc" | awk '/Terminating/{print $1}' \
+          kubectl get pods -n "$svc" -o json \
+            | jq -r '.items[] | select(.metadata.deletionTimestamp != null) | select((now - (.metadata.deletionTimestamp | fromdateiso8601)) > 120) | .metadata.name' \
             | xargs -r kubectl delete pod -n "$svc" --force --grace-period=0
+          # Recover stuck Helm release state before attempting upgrade
+          release_status=$(helm status "$svc" -n "$svc" --output json 2>/dev/null | jq -r '.info.status' 2>/dev/null || echo "not-installed")
+          case "$release_status" in
+            pending-upgrade|pending-install|pending-rollback|failed)
+              echo "Release ${svc} is stuck in ${release_status} — rolling back"
+              helm rollback "$svc" -n "$svc" --wait --timeout 2m || \
+                helm uninstall "$svc" -n "$svc" --wait --timeout 2m || true
+              ;;
+          esac
           if [ -f "helm/${svc}-secret-provider.yaml" ]; then
             envsubst < "helm/${svc}-secret-provider.yaml" | kubectl apply -f -
             SVC="${svc}" envsubst '${SVC}' < helm/secret-init-pod.yaml \
@@ -155,11 +224,12 @@ jobs:
               --timeout=90s
             kubectl delete pod secret-init -n "${svc}" --ignore-not-found
           fi
-          declare -A TIMEOUTS=([airbyte]="15m" [nessie]="10m")
+          declare -A TIMEOUTS=([airbyte]="15m")
           timeout="${TIMEOUTS[$svc]:-5m}"
           helm upgrade --install "$svc" "$chart" \
+            --version "$version" \
             -f <(envsubst < "helm/${svc}-values.yaml") \
-            --namespace "$svc" --atomic --timeout "$timeout"
+            --namespace "$svc" --atomic --cleanup-on-fail --timeout "$timeout"
 
       - name: remove runner IP from AKS authorized ranges
         if: always()

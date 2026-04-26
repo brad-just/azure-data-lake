@@ -1,0 +1,15 @@
+# Pinned Helm chart versions for all data lake services.
+#
+# Bump a version here when you want to upgrade a chart, then open a PR.
+# The helm-deploy.yml workflow reads this file via `yq` — chart upgrades
+# are explicit code changes, not silent surprises from `helm repo update`.
+#
+# To find the latest available version for a chart:
+#   helm repo update && helm search repo <repo>/<chart> --versions | head -5
+
+nessie:   "0.107.4"   # https://charts.projectnessie.org
+airbyte:  "1.9.2"     # https://airbytehq.github.io/helm-charts
+spark:    "2.5.0"     # https://kubeflow.github.io/spark-operator
+trino:    "1.42.1"    # https://trinodb.github.io/charts
+airflow:  "1.21.0"    # https://airflow.apache.org
+superset: "0.15.2"    # https://apache.github.io/superset

@@ -41,6 +41,11 @@ extraVolumeMounts:
     mountPath: /mnt/secrets-store
     readOnly: true
 
+# Nessie is stateless in-pod — all state lives in PostgreSQL.
+# Short grace period avoids the rolling-update stall where the old pod
+# stays in Terminating long enough to hit the progress deadline.
+terminationGracePeriodSeconds: 15
+
 resources:
   requests:
     cpu: 250m
