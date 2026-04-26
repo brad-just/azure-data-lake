@@ -180,7 +180,7 @@ jobs:
 
           #                svc      chart                          version        timeout
           deploy nessie   projectnessie/nessie         "$nessie_ver"   5m
-          deploy airbyte  airbyte/airbyte               "$airbyte_ver"  5m
+          deploy airbyte  airbyte/airbyte               "$airbyte_ver"  8m
           deploy spark    spark-operator/spark-operator "$spark_ver"    5m
           deploy trino    trinodb/trino                 "$trino_ver"    5m
           deploy airflow  apache-airflow/airflow        "$airflow_ver"  5m
@@ -231,7 +231,7 @@ jobs:
               --timeout=90s
             # Pod intentionally kept alive until after helm install — see bootstrap_secrets comment.
           fi
-          declare -A TIMEOUTS=([airbyte]="5m")
+          declare -A TIMEOUTS=([airbyte]="8m")
           timeout="${TIMEOUTS[$svc]:-5m}"
           set +e
           helm upgrade --install "$svc" "$chart" \
