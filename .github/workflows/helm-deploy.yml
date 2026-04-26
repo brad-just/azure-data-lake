@@ -173,7 +173,7 @@ jobs:
 
           #                svc      chart                          version        timeout
           deploy nessie   projectnessie/nessie         "$nessie_ver"   5m
-          deploy airbyte  airbyte/airbyte               "$airbyte_ver"  15m
+          deploy airbyte  airbyte/airbyte               "$airbyte_ver"  10m
           deploy spark    spark-operator/spark-operator "$spark_ver"    5m
           deploy trino    trinodb/trino                 "$trino_ver"    5m
           deploy airflow  apache-airflow/airflow        "$airflow_ver"  5m
@@ -224,7 +224,7 @@ jobs:
               --timeout=90s
             kubectl delete pod secret-init -n "${svc}" --ignore-not-found
           fi
-          declare -A TIMEOUTS=([airbyte]="15m")
+          declare -A TIMEOUTS=([airbyte]="10m")
           timeout="${TIMEOUTS[$svc]:-5m}"
           helm upgrade --install "$svc" "$chart" \
             --version "$version" \
