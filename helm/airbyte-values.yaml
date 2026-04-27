@@ -11,7 +11,7 @@ global:
   database:
     type: external
     host: "${POSTGRES_FQDN}"
-    port: 6432
+    port: 5432
     database: airbyte_db
     # Chart 1.9.x uses secretName/passwordSecretKey/userSecretKey — NOT existingSecret.
     # These tell the chart to read DATABASE_PASSWORD and DATABASE_USER env vars

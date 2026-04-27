@@ -18,7 +18,7 @@ resource "azurerm_postgresql_flexible_server" "main" {
   private_dns_zone_id           = azurerm_private_dns_zone.postgres.id
   public_network_access_enabled = false
 
-  sku_name   = "B_Standard_B1ms"
+  sku_name   = "B_Standard_B2s"
   storage_mb = 32768
 
   backup_retention_days        = 7
@@ -45,15 +45,6 @@ resource "azurerm_postgresql_flexible_server_configuration" "extensions" {
   name      = "azure.extensions"
   server_id = azurerm_postgresql_flexible_server.main.id
   value     = "BTREE_GIN"
-}
-
-# Enable the built-in PgBouncer connection pooler (port 6432).
-# All services connect via PgBouncer so the B1ms max_connections=50 limit
-# is only seen by PgBouncer, not by every Hikari pool in every service.
-resource "azurerm_postgresql_flexible_server_configuration" "pgbouncer" {
-  name      = "pgbouncer.enabled"
-  server_id = azurerm_postgresql_flexible_server.main.id
-  value     = "true"
 }
 
 resource "azurerm_postgresql_flexible_server_database" "airbyte" {
@@ -100,9 +91,21 @@ resource "azurerm_key_vault_secret" "postgres_fqdn" {
   depends_on = [azurerm_role_assignment.keyvault_terraform_admin]
 }
 
+# Import block for secrets that were created manually before Terraform managed them.
+# Remove these import blocks after the first successful apply.
+import {
+  to = azurerm_key_vault_secret.nessie_jdbc_url
+  id = "https://kv-datalake-prod02.vault.azure.net/secrets/nessie-jdbc-url/bdedcca458b042f1ab8ff45444124e9d"
+}
+
+import {
+  to = azurerm_key_vault_secret.airflow_db_uri
+  id = "https://kv-datalake-prod02.vault.azure.net/secrets/airflow-db-uri/6391658913af49ddb0bda26886ec2e8a"
+}
+
 resource "azurerm_key_vault_secret" "nessie_jdbc_url" {
   name         = "nessie-jdbc-url"
-  value        = "jdbc:postgresql://${azurerm_postgresql_flexible_server.main.fqdn}:6432/nessie_db?sslmode=require"
+  value        = "jdbc:postgresql://${azurerm_postgresql_flexible_server.main.fqdn}:5432/nessie_db?sslmode=require"
   key_vault_id = azurerm_key_vault.main.id
 
   depends_on = [azurerm_role_assignment.keyvault_terraform_admin]
@@ -110,7 +113,7 @@ resource "azurerm_key_vault_secret" "nessie_jdbc_url" {
 
 resource "azurerm_key_vault_secret" "airflow_db_uri" {
   name         = "airflow-db-uri"
-  value        = "postgresql+psycopg2://${var.postgres_admin_username}:${random_password.postgres.result}@${azurerm_postgresql_flexible_server.main.fqdn}:6432/airflow_db?sslmode=require"
+  value        = "postgresql+psycopg2://${var.postgres_admin_username}:${random_password.postgres.result}@${azurerm_postgresql_flexible_server.main.fqdn}:5432/airflow_db?sslmode=require"
   key_vault_id = azurerm_key_vault.main.id
 
   depends_on = [azurerm_role_assignment.keyvault_terraform_admin]
