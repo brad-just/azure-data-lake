@@ -8,9 +8,7 @@ service:
 versionStoreConfig:
   storageType: JDBC
 
-# JDBC datasource — credentials injected from the CSI-provisioned secret.
-# The secret (nessie-secrets) is mounted by the SecretProviderClass in
-# nessie-secret-provider.yaml and projected as a Kubernetes secret.
+# JDBC datasource — credentials injected from the ESO-provisioned secret.
 extraEnv:
   - name: QUARKUS_DATASOURCE_JDBC_URL
     valueFrom:
@@ -24,22 +22,6 @@ extraEnv:
       secretKeyRef:
         name: nessie-secrets
         key: db-password
-
-# Volume mount is required — the CSI driver only creates the nessie-secrets
-# Kubernetes secret when a pod mounts this volume. Without it the secretKeyRef
-# env vars above will fail to resolve and the pod will not start.
-extraVolumes:
-  - name: secrets-store
-    csi:
-      driver: secrets-store.csi.k8s.io
-      readOnly: true
-      volumeAttributes:
-        secretProviderClass: nessie-secrets
-
-extraVolumeMounts:
-  - name: secrets-store
-    mountPath: /mnt/secrets-store
-    readOnly: true
 
 # Nessie is stateless in-pod — all state lives in PostgreSQL.
 # Short grace period avoids the rolling-update stall where the old pod

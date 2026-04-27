@@ -47,6 +47,15 @@ resource "azurerm_postgresql_flexible_server_configuration" "extensions" {
   value     = "BTREE_GIN"
 }
 
+# Enable the built-in PgBouncer connection pooler (port 6432).
+# All services connect via PgBouncer so the B1ms max_connections=50 limit
+# is only seen by PgBouncer, not by every Hikari pool in every service.
+resource "azurerm_postgresql_flexible_server_configuration" "pgbouncer" {
+  name      = "pgbouncer.enabled"
+  server_id = azurerm_postgresql_flexible_server.main.id
+  value     = "true"
+}
+
 resource "azurerm_postgresql_flexible_server_database" "airbyte" {
   name      = "airbyte_db"
   server_id = azurerm_postgresql_flexible_server.main.id
@@ -86,6 +95,22 @@ resource "azurerm_key_vault_secret" "postgres_password" {
 resource "azurerm_key_vault_secret" "postgres_fqdn" {
   name         = "postgres-fqdn"
   value        = azurerm_postgresql_flexible_server.main.fqdn
+  key_vault_id = azurerm_key_vault.main.id
+
+  depends_on = [azurerm_role_assignment.keyvault_terraform_admin]
+}
+
+resource "azurerm_key_vault_secret" "nessie_jdbc_url" {
+  name         = "nessie-jdbc-url"
+  value        = "jdbc:postgresql://${azurerm_postgresql_flexible_server.main.fqdn}:6432/nessie_db?sslmode=require"
+  key_vault_id = azurerm_key_vault.main.id
+
+  depends_on = [azurerm_role_assignment.keyvault_terraform_admin]
+}
+
+resource "azurerm_key_vault_secret" "airflow_db_uri" {
+  name         = "airflow-db-uri"
+  value        = "postgresql+psycopg2://${var.postgres_admin_username}:${random_password.postgres.result}@${azurerm_postgresql_flexible_server.main.fqdn}:6432/airflow_db?sslmode=require"
   key_vault_id = azurerm_key_vault.main.id
 
   depends_on = [azurerm_role_assignment.keyvault_terraform_admin]

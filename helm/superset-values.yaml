@@ -11,7 +11,7 @@ redis:
 
 externalDatabase:
   host: "${POSTGRES_FQDN}"
-  port: 5432
+  port: 6432
   user: "${POSTGRES_ADMIN_USERNAME}"
   database: superset_db
   existingSecret: superset-secrets
@@ -35,17 +35,3 @@ resources:
   limits:
     memory: 2Gi
 
-# Mount the CSI volume so the driver creates the superset-secrets Kubernetes
-# secret before the container starts and reads existingSecret / secretKeyRef.
-extraVolumes:
-  - name: secrets-store
-    csi:
-      driver: secrets-store.csi.k8s.io
-      readOnly: true
-      volumeAttributes:
-        secretProviderClass: superset-secrets
-
-extraVolumeMounts:
-  - name: secrets-store
-    mountPath: /mnt/secrets-store
-    readOnly: true

@@ -213,3 +213,5 @@ __marimo__/
 **/*.tfplan
 **/terraform.tfvars
 **/.terraform.lock.hcl
+
+settings.local.json
