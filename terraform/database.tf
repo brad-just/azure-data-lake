@@ -47,6 +47,15 @@ resource "azurerm_postgresql_flexible_server_configuration" "extensions" {
   value     = "BTREE_GIN"
 }
 
+# B2s defaults to 50 max_connections (same as B1ms) despite having more RAM.
+# 200 gives headroom for all 6 Airbyte Hikari pools + Nessie/Airflow/Superset
+# starting concurrently without hitting the connection limit.
+resource "azurerm_postgresql_flexible_server_configuration" "max_connections" {
+  name      = "max_connections"
+  server_id = azurerm_postgresql_flexible_server.main.id
+  value     = "200"
+}
+
 resource "azurerm_postgresql_flexible_server_database" "airbyte" {
   name      = "airbyte_db"
   server_id = azurerm_postgresql_flexible_server.main.id
