@@ -98,7 +98,7 @@ variable "aks_system_vm_size" {
 variable "aks_system_node_count" {
   description = "Fixed node count for the system node pool"
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "aks_spark_vm_size" {
