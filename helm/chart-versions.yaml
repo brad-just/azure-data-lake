@@ -7,9 +7,10 @@
 # To find the latest available version for a chart:
 #   helm repo update && helm search repo <repo>/<chart> --versions | head -5
 
-nessie:   "0.107.4"   # https://charts.projectnessie.org
-airbyte:  "1.9.2"     # https://airbytehq.github.io/helm-charts
-spark:    "2.5.0"     # https://kubeflow.github.io/spark-operator
-trino:    "1.42.1"    # https://trinodb.github.io/charts
-airflow:  "1.21.0"    # https://airflow.apache.org
-superset: "0.15.2"    # https://apache.github.io/superset
+external-secrets: "2.4.0"    # https://charts.external-secrets.io
+nessie:           "0.107.4"  # https://charts.projectnessie.org
+airbyte:          "1.9.2"    # https://airbytehq.github.io/helm-charts
+spark:            "2.5.0"    # https://kubeflow.github.io/spark-operator
+trino:            "1.42.1"   # https://trinodb.github.io/charts
+airflow:          "1.21.0"   # https://airflow.apache.org
+superset:         "0.15.2"   # https://apache.github.io/superset

@@ -33,7 +33,7 @@ jobs:
     environment: production
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     env:
-      # Substituted into values files and secret provider manifests via envsubst
+      # Substituted into values files and ESO manifests via envsubst
       POSTGRES_FQDN: ${{ secrets.POSTGRES_FQDN }}
       POSTGRES_ADMIN_USERNAME: ${{ secrets.POSTGRES_ADMIN_USERNAME }}
       ADLS_STORAGE_ACCOUNT_NAME: ${{ secrets.ADLS_STORAGE_ACCOUNT_NAME }}
@@ -96,32 +96,28 @@ jobs:
 
       - name: add helm repos
         run: |
-          helm repo add projectnessie  https://charts.projectnessie.org
-          helm repo add airbyte        https://airbytehq.github.io/helm-charts
-          helm repo add spark-operator https://kubeflow.github.io/spark-operator
-          helm repo add trinodb        https://trinodb.github.io/charts
-          helm repo add apache-airflow https://airflow.apache.org
-          helm repo add superset       https://apache.github.io/superset
+          helm repo add external-secrets https://charts.external-secrets.io
+          helm repo add projectnessie    https://charts.projectnessie.org
+          helm repo add airbyte          https://airbytehq.github.io/helm-charts
+          helm repo add spark-operator   https://kubeflow.github.io/spark-operator
+          helm repo add trinodb          https://trinodb.github.io/charts
+          helm repo add apache-airflow   https://airflow.apache.org
+          helm repo add superset         https://apache.github.io/superset
           helm repo update
+
+      - name: deploy external secrets operator
+        run: |
+          eso_ver=$(yq '.external-secrets' helm/chart-versions.yaml)
+          kubectl create namespace external-secrets --dry-run=client -o yaml | kubectl apply -f -
+          helm upgrade --install external-secrets external-secrets/external-secrets \
+            --namespace external-secrets \
+            --version "$eso_ver" \
+            --atomic --timeout 3m
+          envsubst < helm/eso-cluster-secret-store.yaml | kubectl apply -f -
 
       - name: deploy all services
         if: ${{ !inputs.service }}
         run: |
-          bootstrap_secrets() {
-            local svc=$1
-            [ -f "helm/${svc}-secret-provider.yaml" ] || return 0
-            # Mount the CSI volume to trigger K8s secret creation, then wait.
-            # The pod is intentionally NOT deleted here — the CSI driver removes
-            # the K8s secret as soon as no pod is mounting the volume. The pod
-            # must stay alive until helm install completes and chart pods take
-            # over the mount. deploy() deletes it after helm finishes.
-            SVC="${svc}" envsubst '${SVC}' < helm/secret-init-pod.yaml \
-              | kubectl apply -n "${svc}" -f -
-            kubectl wait pod/secret-init -n "${svc}" \
-              --for=condition=Ready \
-              --timeout=90s
-          }
-
           recover_release() {
             local svc=$1
             local status
@@ -153,21 +149,15 @@ jobs:
               | jq -r '.items[] | select(.metadata.deletionTimestamp != null) | select((now - (.metadata.deletionTimestamp | fromdateiso8601)) > 120) | .metadata.name' \
               | xargs -r kubectl delete pod -n "$svc" --force --grace-period=0
             recover_release "$svc"
-            if [ -f "helm/${svc}-secret-provider.yaml" ]; then
-              envsubst < "helm/${svc}-secret-provider.yaml" | kubectl apply -f -
-              bootstrap_secrets "$svc"
+            if [ -f "helm/${svc}-external-secret.yaml" ]; then
+              kubectl apply -f "helm/${svc}-external-secret.yaml"
+              kubectl wait externalsecret/"${svc}-secrets" -n "$svc" \
+                --for=condition=Ready=True --timeout=60s
             fi
-            set +e
             helm upgrade --install "$svc" "$chart" \
               --version "$version" \
               -f <(envsubst < "helm/${svc}-values.yaml") \
               --namespace "$svc" --atomic --cleanup-on-fail --timeout "$timeout"
-            local helm_rc=$?
-            set -e
-            # Delete the bootstrap pod now that chart pods are running and mounting
-            # the CSI volume themselves (keeping the K8s secret alive going forward).
-            kubectl delete pod secret-init -n "$svc" --ignore-not-found 2>/dev/null || true
-            return $helm_rc
           }
 
           # Read pinned versions from helm/chart-versions.yaml
@@ -197,13 +187,13 @@ jobs:
             [airflow]="apache-airflow/airflow"
             [superset]="superset/superset"
           )
+          svc="${{ inputs.service }}"
           # Read pinned version from helm/chart-versions.yaml
           version=$(yq ".${svc}" helm/chart-versions.yaml)
           if [ -z "$version" ] || [ "$version" = "null" ]; then
             echo "No pinned version found for ${svc} in helm/chart-versions.yaml"
             exit 1
           fi
-          svc="${{ inputs.service }}"
           chart="${CHARTS[$svc]}"
           if [ -z "$chart" ]; then
             echo "Unknown service: $svc. Valid values: ${!CHARTS[*]}"
@@ -222,26 +212,17 @@ jobs:
                 helm uninstall "$svc" -n "$svc" --wait --timeout 2m || true
               ;;
           esac
-          if [ -f "helm/${svc}-secret-provider.yaml" ]; then
-            envsubst < "helm/${svc}-secret-provider.yaml" | kubectl apply -f -
-            SVC="${svc}" envsubst '${SVC}' < helm/secret-init-pod.yaml \
-              | kubectl apply -n "${svc}" -f -
-            kubectl wait pod/secret-init -n "${svc}" \
-              --for=condition=Ready \
-              --timeout=90s
-            # Pod intentionally kept alive until after helm install — see bootstrap_secrets comment.
+          if [ -f "helm/${svc}-external-secret.yaml" ]; then
+            kubectl apply -f "helm/${svc}-external-secret.yaml"
+            kubectl wait externalsecret/"${svc}-secrets" -n "$svc" \
+              --for=condition=Ready=True --timeout=60s
           fi
           declare -A TIMEOUTS=([airbyte]="10m")
           timeout="${TIMEOUTS[$svc]:-5m}"
-          set +e
           helm upgrade --install "$svc" "$chart" \
             --version "$version" \
             -f <(envsubst < "helm/${svc}-values.yaml") \
             --namespace "$svc" --atomic --cleanup-on-fail --timeout "$timeout"
-          helm_rc=$?
-          set -e
-          kubectl delete pod secret-init -n "$svc" --ignore-not-found 2>/dev/null || true
-          exit $helm_rc
 
       - name: remove runner IP from AKS authorized ranges
         if: always()

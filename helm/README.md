@@ -1,8 +1,9 @@
 # Helm — Service Deployments
 
-Helm values files and SecretProviderClass manifests for all data lake services
+Helm values files and ExternalSecret manifests for all data lake services
 running on AKS. Secrets are never stored in these files — they are pulled from
-Azure Key Vault at pod startup via the Secrets Store CSI Driver.
+Azure Key Vault by the External Secrets Operator and surfaced as Kubernetes Secrets
+before each Helm install.
 
 ---
 
@@ -10,6 +11,7 @@ Azure Key Vault at pod startup via the Secrets Store CSI Driver.
 
 | Service | Chart | Namespace | Purpose |
 |---|---|---|---|
+| External Secrets Operator | `external-secrets/external-secrets` | `external-secrets` | Syncs Key Vault secrets to K8s Secrets |
 | Nessie | `projectnessie/nessie` | `nessie` | Iceberg REST catalog (backed by PostgreSQL) |
 | Airbyte | `airbyte/airbyte` | `airbyte` | Data ingestion |
 | Spark | `spark-operator/spark-operator` | `spark` | Spark operator (custom image from ACR via SparkApplication CRDs) |
@@ -17,10 +19,10 @@ Azure Key Vault at pod startup via the Secrets Store CSI Driver.
 | Airflow | `apache-airflow/airflow` | `airflow` | Orchestration (KubernetesExecutor) |
 | Superset | `superset/superset` | `superset` | Visualisation |
 
-**Deploy in this order** — each service depends on the ones above it:
+**Deploy in this order** — ESO must be running before any service that needs secrets:
 
 ```
-Nessie → Airbyte → Spark → Trino → Airflow → Superset
+ESO → Nessie → Airbyte → Spark → Trino → Airflow → Superset
 ```
 
 ---
@@ -29,7 +31,6 @@ Nessie → Airbyte → Spark → Trino → Airflow → Superset
 
 - `kubectl` configured against the AKS cluster (`az aks get-credentials`)
 - `helm` >= 3.x installed
-- Secrets Store CSI Driver running on the cluster (installed via AKS add-on in Terraform)
 - The following secrets added to Key Vault **before first deploy** (see below)
 
 ### Helm repos
@@ -37,12 +38,13 @@ Nessie → Airbyte → Spark → Trino → Airflow → Superset
 Add all chart repositories once:
 
 ```bash
-helm repo add projectnessie  https://charts.projectnessie.org
-helm repo add airbyte        https://airbytehq.github.io/helm-charts
-helm repo add spark-operator https://kubeflow.github.io/spark-operator
-helm repo add trinodb        https://trinodb.github.io/charts
-helm repo add apache-airflow https://airflow.apache.org
-helm repo add superset       https://apache.github.io/superset
+helm repo add external-secrets https://charts.external-secrets.io
+helm repo add projectnessie    https://charts.projectnessie.org
+helm repo add airbyte          https://airbytehq.github.io/helm-charts
+helm repo add spark-operator   https://kubeflow.github.io/spark-operator
+helm repo add trinodb          https://trinodb.github.io/charts
+helm repo add apache-airflow   https://airflow.apache.org
+helm repo add superset         https://apache.github.io/superset
 helm repo update
 ```
 
@@ -102,13 +104,9 @@ The postgres password and FQDN are already in Key Vault from `terraform apply`.
 
 ## Deploying
 
-Each service has two files:
-- `<service>-values.yaml` — Helm values
-- `<service>-secret-provider.yaml` — SecretProviderClass manifest (where applicable)
+### Environment variables
 
-Both file types contain `${VARIABLE}` placeholders that must be substituted at
-deploy time via `envsubst`. Set all environment variables before running any
-deploy command:
+Set these before running any deploy command (CI sets them from GitHub secrets):
 
 ```bash
 export AKS_KUBELET_IDENTITY_CLIENT_ID=$(az aks show \
@@ -118,22 +116,25 @@ export AKS_KUBELET_IDENTITY_CLIENT_ID=$(az aks show \
 export KEYVAULT_NAME=<your-keyvault-name>
 export AZURE_TENANT_ID=$(az account show --query tenantId -o tsv)
 
-# Terraform outputs
 export POSTGRES_FQDN=$(cd terraform && terraform output -raw postgres_fqdn)
 export ADLS_STORAGE_ACCOUNT_NAME=$(cd terraform && terraform output -raw adls_storage_account_name)
 export BLOB_STORAGE_ACCOUNT_NAME=$(cd terraform && terraform output -raw blob_storage_account_name)
-
-# From tfvars
 export POSTGRES_ADMIN_USERNAME=<your-postgres-admin-username>
-
-# Set by spark-image.yml after a Spark image build; read from committed tag file
 export SPARK_IMAGE_TAG=$(cat docker/spark/.current-tag)
-export ACR_LOGIN_SERVER=<your-acr-login-server>  # from `terraform output acr_login_server`
+export ACR_LOGIN_SERVER=<your-acr-login-server>
 ```
 
-### Deploy all services (full stack)
+### Deploy ESO and ClusterSecretStore (once per cluster)
 
-Read versions from `chart-versions.yaml` first:
+```bash
+eso_ver=$(yq '.external-secrets' helm/chart-versions.yaml)
+kubectl create namespace external-secrets --dry-run=client -o yaml | kubectl apply -f -
+helm upgrade --install external-secrets external-secrets/external-secrets \
+  --namespace external-secrets --version "$eso_ver" --atomic --timeout 3m
+envsubst < helm/eso-cluster-secret-store.yaml | kubectl apply -f -
+```
+
+### Deploy all services
 
 ```bash
 nessie_ver=$(yq '.nessie'   helm/chart-versions.yaml)
@@ -145,65 +146,72 @@ superset_ver=$(yq '.superset' helm/chart-versions.yaml)
 
 # Nessie
 kubectl create namespace nessie --dry-run=client -o yaml | kubectl apply -f -
-envsubst < helm/nessie-secret-provider.yaml | kubectl apply -f -
+kubectl apply -f helm/nessie-external-secret.yaml
+kubectl wait externalsecret/nessie-secrets -n nessie --for=condition=Ready=True --timeout=60s
 helm upgrade --install nessie projectnessie/nessie \
-  --version "$nessie_ver" \
-  -f <(envsubst < helm/nessie-values.yaml) \
+  --version "$nessie_ver" -f <(envsubst < helm/nessie-values.yaml) \
   --namespace nessie --atomic --cleanup-on-fail --timeout 5m
 
 # Airbyte
 kubectl create namespace airbyte --dry-run=client -o yaml | kubectl apply -f -
-envsubst < helm/airbyte-secret-provider.yaml | kubectl apply -f -
+kubectl apply -f helm/airbyte-external-secret.yaml
+kubectl wait externalsecret/airbyte-secrets -n airbyte --for=condition=Ready=True --timeout=60s
 helm upgrade --install airbyte airbyte/airbyte \
-  --version "$airbyte_ver" \
-  -f <(envsubst < helm/airbyte-values.yaml) \
-  --namespace airbyte --atomic --cleanup-on-fail --timeout 15m
+  --version "$airbyte_ver" -f <(envsubst < helm/airbyte-values.yaml) \
+  --namespace airbyte --atomic --cleanup-on-fail --timeout 10m
 
-# Spark
+# Spark (no secrets needed)
 kubectl create namespace spark --dry-run=client -o yaml | kubectl apply -f -
 helm upgrade --install spark spark-operator/spark-operator \
-  --version "$spark_ver" \
-  -f <(envsubst < helm/spark-values.yaml) \
+  --version "$spark_ver" -f <(envsubst < helm/spark-values.yaml) \
   --namespace spark --atomic --cleanup-on-fail --timeout 5m
 
-# Trino
+# Trino (no secrets needed — uses workload identity for ADLS)
 kubectl create namespace trino --dry-run=client -o yaml | kubectl apply -f -
 helm upgrade --install trino trinodb/trino \
-  --version "$trino_ver" \
-  -f <(envsubst < helm/trino-values.yaml) \
+  --version "$trino_ver" -f <(envsubst < helm/trino-values.yaml) \
   --namespace trino --atomic --cleanup-on-fail --timeout 5m
 
 # Airflow
 kubectl create namespace airflow --dry-run=client -o yaml | kubectl apply -f -
-envsubst < helm/airflow-secret-provider.yaml | kubectl apply -f -
+kubectl apply -f helm/airflow-external-secret.yaml
+kubectl wait externalsecret/airflow-secrets -n airflow --for=condition=Ready=True --timeout=60s
 helm upgrade --install airflow apache-airflow/airflow \
-  --version "$airflow_ver" \
-  -f <(envsubst < helm/airflow-values.yaml) \
+  --version "$airflow_ver" -f <(envsubst < helm/airflow-values.yaml) \
   --namespace airflow --atomic --cleanup-on-fail --timeout 5m
 
 # Superset
 kubectl create namespace superset --dry-run=client -o yaml | kubectl apply -f -
-envsubst < helm/superset-secret-provider.yaml | kubectl apply -f -
+kubectl apply -f helm/superset-external-secret.yaml
+kubectl wait externalsecret/superset-secrets -n superset --for=condition=Ready=True --timeout=60s
 helm upgrade --install superset superset/superset \
-  --version "$superset_ver" \
-  -f <(envsubst < helm/superset-values.yaml) \
+  --version "$superset_ver" -f <(envsubst < helm/superset-values.yaml) \
   --namespace superset --atomic --cleanup-on-fail --timeout 5m
 ```
 
-### Deploy a single service
+CI/CD (`helm-deploy.yml`) handles this automatically — see `.github/CLAUDE.md`.
 
-```bash
-SERVICE=nessie  # change as needed
-VERSION=$(yq ".${SERVICE}" helm/chart-versions.yaml)
-kubectl create namespace $SERVICE --dry-run=client -o yaml | kubectl apply -f -
-envsubst < helm/${SERVICE}-secret-provider.yaml | kubectl apply -f -
-helm upgrade --install $SERVICE <repo>/$SERVICE \
-  --version "$VERSION" \
-  -f <(envsubst < helm/${SERVICE}-values.yaml) \
-  --namespace $SERVICE --atomic --cleanup-on-fail --timeout 5m
+---
+
+## Secrets management
+
+All secrets flow: **Azure Key Vault → External Secrets Operator → Kubernetes Secret**
+
+```
+Key Vault secret
+      ↓
+ClusterSecretStore (helm/eso-cluster-secret-store.yaml)
+      ↓
+ExternalSecret (helm/<service>-external-secret.yaml)
+      ↓
+Kubernetes Secret (persistent — not tied to pod lifecycle)
+      ↓
+Pod env var (via secretKeyRef in chart values)
 ```
 
-CI/CD (`helm-deploy.yml`) handles this automatically — see `.github/CLAUDE.md`.
+ESO syncs secrets every hour (`refreshInterval: 1h`). Secrets persist independently
+of pod lifecycle — no bootstrap pod or CSI volume mount required. No credentials are
+stored in this repository or in Helm values.
 
 ---
 
@@ -232,28 +240,7 @@ kubectl port-forward svc/airflow-webserver 8080:8080 -n airflow
 
 ---
 
-## Secrets management
-
-All secrets flow through Azure Key Vault → Secrets Store CSI Driver → Kubernetes secret:
-
-```
-Key Vault secret
-      ↓
-SecretProviderClass (helm/*-secret-provider.yaml)
-      ↓
-Kubernetes Secret (created when a pod mounts the CSI volume)
-      ↓
-Pod env var (via secretKeyRef in values.yaml)
-```
-
-Secrets are rotated automatically every 2 minutes (configured in the AKS add-on).
-No credentials are stored in this repository or in Helm values.
-
----
-
 ## Values files: outstanding TODOs
-
-Several values contain `# TODO` comments for items deferred until production:
 
 | File | TODO |
 |---|---|

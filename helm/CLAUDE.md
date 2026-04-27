@@ -7,10 +7,10 @@
 ## General rules
 
 - One values file per service under `helm/`
-- All Helm installs use `--atomic --cleanup-on-fail --timeout 5m` (Airbyte uses `--timeout 15m`)
+- All Helm installs use `--atomic --cleanup-on-fail --timeout 5m` (Airbyte uses `--timeout 10m`)
 - Chart versions are pinned in `helm/chart-versions.yaml` — never let `helm repo update` silently upgrade a chart. To upgrade: bump the version in that file and open a PR.
-- Secrets are never in values files — they come from Kubernetes secrets provisioned by the Secrets Store CSI Driver from Key Vault
-- Reference the CSI-provisioned secret name in values using `existingSecret` or equivalent chart parameter
+- Secrets are never in values files — they come from Kubernetes secrets created by External Secrets Operator from Azure Key Vault
+- Reference the ESO-provisioned secret name in values using `existingSecret` or equivalent chart parameter
 
 ---
 
@@ -66,33 +66,37 @@
 
 ---
 
-## Secrets Store CSI Driver pattern
+## External Secrets Operator pattern
 
-For each service that needs a secret, produce a `SecretProviderClass` manifest alongside the values file. Example pattern:
+Secrets flow: **Azure Key Vault → ESO → Kubernetes Secret**
+
+A single `ClusterSecretStore` (`helm/eso-cluster-secret-store.yaml`) points at the Key Vault using the AKS kubelet managed identity. Per-service `ExternalSecret` resources (`helm/<service>-external-secret.yaml`) pull the required secrets and create persistent Kubernetes Secrets in each namespace.
+
+Unlike the Secrets Store CSI Driver, ESO secrets are persistent — they are not deleted when pods stop. This means no bootstrap pod is needed before Helm deploys.
+
+ESO is deployed to its own `external-secrets` namespace before any service. The deploy workflow:
+1. Installs ESO via Helm (`external-secrets/external-secrets`, version pinned in `chart-versions.yaml`)
+2. Applies `eso-cluster-secret-store.yaml` (substitutes Key Vault name, tenant, and identity via `envsubst`)
+3. For each service: applies `<service>-external-secret.yaml`, waits for `condition=Ready=True`, then runs `helm upgrade --install`
+
+Example `ExternalSecret`:
 
 ```yaml
-apiVersion: secrets-store.csi.x-k8s.io/v1
-kind: SecretProviderClass
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
 metadata:
   name: <service>-secrets
   namespace: <service>
 spec:
-  provider: azure
-  parameters:
-    usePodIdentity: "false"
-    useVMManagedIdentity: "true"
-    userAssignedIdentityID: <aks-managed-identity-client-id>  # TODO: fill from Terraform output
-    keyvaultName: <keyvault-name>                              # TODO: fill from Terraform output
-    objects: |
-      array:
-        - |
-          objectName: <secret-name-in-keyvault>
-          objectType: secret
-    tenantId: <tenant-id>                                      # TODO: fill from Terraform output
-  secretObjects:
-    - secretName: <k8s-secret-name>
-      type: Opaque
-      data:
-        - objectName: <secret-name-in-keyvault>
-          key: <key-in-k8s-secret>
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: azure-keyvault
+  target:
+    name: <service>-secrets
+    creationPolicy: Owner
+  data:
+    - secretKey: <k8s-secret-key>
+      remoteRef:
+        key: <keyvault-secret-name>
 ```

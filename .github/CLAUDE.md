@@ -74,16 +74,11 @@ Triggers: push to `main` affecting `helm/**`, or `workflow_dispatch` with a `ser
 Jobs:
 - `deploy`:
   - Get AKS credentials: `azure/aks-set-context@v3`
-  - Before applying any `*-secret-provider.yaml`, run `envsubst` to substitute the
-    three placeholders. These must be available as environment variables in the job:
-    - `AKS_KUBELET_IDENTITY_CLIENT_ID` — from GitHub secret `AKS_KUBELET_IDENTITY_CLIENT_ID`
-      (populate with: `az aks show --name <cluster> --resource-group <rg> --query identityProfile.kubeletidentity.clientId -o tsv`)
-    - `KEYVAULT_NAME` — from GitHub secret `KEYVAULT_NAME`
-    - `AZURE_TENANT_ID` — already a required secret
-    - Apply with: `envsubst < helm/<service>-secret-provider.yaml | kubectl apply -f -`
+  - Deploy External Secrets Operator (ESO) to `external-secrets` namespace first, then apply `eso-cluster-secret-store.yaml` (substituted via `envsubst` with `AKS_KUBELET_IDENTITY_CLIENT_ID`, `KEYVAULT_NAME`, `AZURE_TENANT_ID`)
+  - For each service with a `*-external-secret.yaml`: apply the manifest, wait for `condition=Ready=True` on the `ExternalSecret`, then run helm
   - If `service` input is set, deploy only that chart
   - Otherwise deploy all charts in dependency order: nessie → airbyte → spark → trino → airflow → superset
-  - Each install: `helm upgrade --install <name> <repo>/<chart> -f helm/<name>-values.yaml --atomic --timeout 5m`
+  - Each install: `helm upgrade --install <name> <repo>/<chart> -f helm/<name>-values.yaml --atomic --cleanup-on-fail --timeout 5m`
   - Spark install must substitute the real image tag — read from the committed tag file or a workflow input; never hardcode `:latest`
 
 ### `ci.yml`
