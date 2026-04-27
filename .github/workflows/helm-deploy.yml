@@ -118,7 +118,7 @@ jobs:
             SVC="${svc}" envsubst '${SVC}' < helm/secret-init-pod.yaml \
               | kubectl apply -n "${svc}" -f -
             kubectl wait pod/secret-init -n "${svc}" \
-              --for=jsonpath='{.status.phase}'=Succeeded \
+              --for=condition=Ready \
               --timeout=90s
           }
 
@@ -227,7 +227,7 @@ jobs:
             SVC="${svc}" envsubst '${SVC}' < helm/secret-init-pod.yaml \
               | kubectl apply -n "${svc}" -f -
             kubectl wait pod/secret-init -n "${svc}" \
-              --for=jsonpath='{.status.phase}'=Succeeded \
+              --for=condition=Ready \
               --timeout=90s
             # Pod intentionally kept alive until after helm install — see bootstrap_secrets comment.
           fi
