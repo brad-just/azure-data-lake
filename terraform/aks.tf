@@ -12,11 +12,12 @@ resource "azurerm_kubernetes_cluster" "main" {
   }
 
   default_node_pool {
-    name           = "system"
-    node_count     = var.aks_system_node_count
-    vm_size        = var.aks_system_vm_size
-    vnet_subnet_id = azurerm_subnet.aks.id
-    os_disk_type   = "Managed"
+    name                        = "system"
+    node_count                  = var.aks_system_node_count
+    vm_size                     = var.aks_system_vm_size
+    vnet_subnet_id              = azurerm_subnet.aks.id
+    os_disk_type                = "Managed"
+    temporary_name_for_rotation = "systmp"
 
     upgrade_settings {
       max_surge = "10%"
