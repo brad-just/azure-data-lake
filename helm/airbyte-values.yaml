@@ -20,26 +20,17 @@ global:
     passwordSecretKey: db-password
     userSecretKey: db-username
 
-  logs:
-    storage:
-      type: azure
-      azure:
-        storageAccountName: "${BLOB_STORAGE_ACCOUNT_NAME}"
-        storageContainerName: airbyte-logs
-        # Authenticate via AKS workload identity — no static connection string
-        # TODO: complete workload identity annotation on the Airbyte service account
-        # storageAccountKey pulled from secret if workload identity is not yet wired
-        existingSecret: airbyte-secrets
-        existingSecretKey: blob-connection-string
-
-  state:
-    storage:
-      type: azure
-      azure:
-        storageAccountName: "${BLOB_STORAGE_ACCOUNT_NAME}"
-        storageContainerName: airbyte-state
-        existingSecret: airbyte-secrets
-        existingSecretKey: blob-connection-string
+  storage:
+    # Setting type to azure eliminates the minio-create-bucket post-upgrade hook,
+    # which loops forever when minio.enabled=false and causes CI timeouts.
+    type: azure
+    storageSecretName: airbyte-secrets
+    bucket:
+      log: airbyte-logs
+      state: airbyte-state
+      workloadOutput: airbyte-state
+    azure:
+      connectionStringSecretKey: blob-connection-string
 
 resources:
   requests:
