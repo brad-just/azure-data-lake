@@ -1,0 +1,43 @@
+name: Superset Image
+
+on:
+  push:
+    branches: [main]
+    paths: ['docker/superset/**']
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: login to ACR
+        run: az acr login --name ${{ secrets.ACR_LOGIN_SERVER }}
+
+      - name: build and push
+        run: |
+          IMAGE="${{ secrets.ACR_LOGIN_SERVER }}/superset"
+          docker build \
+            -t "${IMAGE}:${{ github.sha }}" \
+            -t "${IMAGE}:latest" \
+            docker/superset/
+          docker push "${IMAGE}:${{ github.sha }}"
+          docker push "${IMAGE}:latest"
+
+      - id: tag
+        name: expose image tag
+        run: echo "sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+
+    outputs:
+      image-tag: ${{ steps.tag.outputs.sha }}

@@ -1,22 +1,24 @@
 # Chart: trinodb/trino
 # Repo:  helm repo add trinodb https://trinodb.github.io/charts
 
+server:
+  workers: 1
+
 coordinator:
   resources:
     requests:
       cpu: 500m
-      memory: 2Gi    # TODO: tune coordinator memory
+      memory: 768Mi    # TODO: tune coordinator memory for production
     limits:
-      memory: 4Gi
+      memory: 2Gi
 
 worker:
-  replicas: 1
   resources:
     requests:
       cpu: 500m
-      memory: 2Gi    # TODO: tune worker memory
+      memory: 768Mi    # TODO: tune worker memory for production
     limits:
-      memory: 4Gi
+      memory: 2Gi
 
 service:
   type: ClusterIP

@@ -7,7 +7,7 @@
 ## General rules
 
 - One values file per service under `helm/`
-- All Helm installs use `--atomic --cleanup-on-fail --timeout 5m` (Airbyte uses `--timeout 10m`)
+- All Helm installs use `--atomic --cleanup-on-fail --timeout 5m`; exceptions: Airbyte, Airflow, and Superset use `--timeout 10m`
 - Chart versions are pinned in `helm/chart-versions.yaml` — never let `helm repo update` silently upgrade a chart. To upgrade: bump the version in that file and open a PR.
 - Secrets are never in values files — they come from Kubernetes secrets created by External Secrets Operator from Azure Key Vault
 - Reference the ESO-provisioned secret name in values using `existingSecret` or equivalent chart parameter
@@ -54,8 +54,10 @@
 ### Superset (`superset-values.yaml`)
 - Chart: `superset/superset`
 - External PostgreSQL: `superset_db`
-- **Use the Redis instance bundled with this chart** — do not set `redis.enabled: false`
-- Key Vault secrets needed: postgres credentials, Superset secret key
+- **Bitnami Redis subchart is disabled** (`redis.enabled: false`) — Bitnami moved to a paid registry in 2025. A standalone Redis is deployed via `helm/superset-redis.yaml` (official Docker Hub `redis:7.0-alpine`), named `superset-redis-headless` to match the chart's default `redis_host`. The `helm-deploy.yml` `deploy()` function applies `helm/${svc}-redis.yaml` automatically before each Helm install.
+- **Custom ACR image** (`docker/superset/Dockerfile`) — the upstream Superset image ships without database drivers; the custom image adds `psycopg2-binary`. Built and pushed by `superset-image.yml`; referenced as `${ACR_LOGIN_SERVER}/superset:${SUPERSET_IMAGE_TAG}`.
+- **`resources.requests.cpu` is intentionally unset** — the dev cluster's system node pool (2× D2s_v3) runs out of CPU headroom with the full stack deployed. Add an explicit CPU request when sizing for production.
+- Key Vault secrets needed: postgres credentials (`postgres-admin-password`), Superset secret key (`superset-secret-key`), API secret key (`superset-api-secret-key` → `airflow-api-secret-key`)
 
 ### Airflow (`airflow-values.yaml`)
 - Chart: `apache-airflow/airflow`

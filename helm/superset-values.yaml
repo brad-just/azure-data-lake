@@ -1,27 +1,53 @@
 # Chart: superset/superset
 # Repo:  helm repo add superset https://apache.github.io/superset
 
+image:
+  repository: "${ACR_LOGIN_SERVER}/superset"
+  tag: "${SUPERSET_IMAGE_TAG}"
+  pullPolicy: IfNotPresent
+
 # Disable bundled PostgreSQL — use the shared external instance
 postgresql:
   enabled: false
 
-# Use the Redis instance bundled with this chart — do not disable
+# Bitnami Redis subchart disabled — Bitnami moved to a paid registry in 2025.
+# A standalone Redis using the official Docker Hub image is deployed via
+# superset-redis.yaml; the service is named superset-redis-headless to match
+# the default redis_host below.
 redis:
-  enabled: true
+  enabled: false
 
-externalDatabase:
-  host: "${POSTGRES_FQDN}"
-  port: 5432
-  user: "${POSTGRES_ADMIN_USERNAME}"
-  database: superset_db
-  existingSecret: superset-secrets
-  existingSecretPasswordKey: db-password
+supersetNode:
+  connections:
+    db_host: "${POSTGRES_FQDN}"
+    db_port: "5432"
+    db_user: "${POSTGRES_ADMIN_USERNAME}"
+    db_name: "superset_db"
+    db_pass: ""   # overridden via extraEnvRaw — never set plaintext here
+    redis_host: "superset-redis-headless"
+    redis_port: "6379"
 
+# Override SQLALCHEMY_DATABASE_URI to percent-encode the password.
+# The chart's default string interpolation breaks when the password contains
+# special URL characters (e.g. [ ]) that Python 3.x urlsplit rejects.
 configOverrides:
+  db_uri: |
+    from urllib.parse import quote
+    import os
+    SQLALCHEMY_DATABASE_URI = (
+        f"postgresql+psycopg2://{os.environ['DB_USER']}:"
+        f"{quote(os.environ['DB_PASS'], safe='')}@"
+        f"{os.environ['DB_HOST']}:{os.environ['DB_PORT']}/{os.environ['DB_NAME']}"
+    )
   secret: |
     SECRET_KEY = os.environ.get("SUPERSET_SECRET_KEY", "")
 
 extraEnvRaw:
+  - name: DB_PASS
+    valueFrom:
+      secretKeyRef:
+        name: superset-secrets
+        key: db-password
   - name: SUPERSET_SECRET_KEY
     valueFrom:
       secretKeyRef:
@@ -30,8 +56,6 @@ extraEnvRaw:
 
 resources:
   requests:
-    cpu: 500m
-    memory: 1Gi
+    memory: 1Gi  # TODO: add cpu request when sizing for production
   limits:
     memory: 2Gi
-

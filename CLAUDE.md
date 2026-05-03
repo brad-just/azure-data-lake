@@ -96,6 +96,14 @@ Always deploy in this order to respect catalog and database dependencies:
 
 ---
 
+## Pending features
+
+- **Grafana + Prometheus observability stack** — Add `kube-prometheus-stack` (chart: `prometheus-community/kube-prometheus-stack`) to a dedicated node pool or the system pool. Gives cluster-wide CPU/memory dashboards, pod-level metrics, and alerting. Deploy after the core stack is stable. See `helm search repo prometheus-community/kube-prometheus-stack`.
+
+- **Airflow remote logging to Azure Blob Storage** — With `KubernetesExecutor`, task pods are ephemeral; their logs are lost when the pod is cleaned up. Configure `AIRFLOW__LOGGING__REMOTE_LOGGING=True` with an Azure Blob Storage connection so task logs persist. Add the storage connection string (or use workload identity) as a Key Vault secret, surface it via ESO, and set it in `airflow-values.yaml` under `env`. See [Airflow docs: remote logging](https://airflow.apache.org/docs/apache-airflow-providers-microsoft-azure/stable/logging/index.html).
+
+---
+
 ## Global conventions
 
 - All secrets via Azure Key Vault → Secrets Store CSI Driver → Kubernetes secrets. Never hardcode credentials.

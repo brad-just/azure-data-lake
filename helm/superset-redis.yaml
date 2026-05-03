@@ -1,0 +1,47 @@
+# Standalone Redis for Superset.
+# Replaces the Bitnami redis subchart, which requires a paid registry as of 2025.
+# Service is named superset-redis-headless to match supersetNode.connections.redis_host
+# in superset-values.yaml — no chart values change needed.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: superset-redis
+  namespace: superset
+  labels:
+    app: superset-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: superset-redis
+  template:
+    metadata:
+      labels:
+        app: superset-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7.0-alpine
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: superset-redis-headless
+  namespace: superset
+  labels:
+    app: superset-redis
+spec:
+  selector:
+    app: superset-redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+  type: ClusterIP

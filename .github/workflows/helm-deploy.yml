@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths: ['helm/**']
   workflow_run:
-    workflows: ['Spark Image']
+    workflows: ['Spark Image', 'Superset Image']
     types: [completed]
     branches: [main]
   workflow_dispatch:
@@ -16,6 +16,10 @@ on:
         type: string
       spark_image_tag:
         description: 'Spark image tag override (leave empty to use latest built SHA)'
+        required: false
+        type: string
+      superset_image_tag:
+        description: 'Superset image tag override (leave empty to use latest built SHA)'
         required: false
         type: string
 
@@ -42,9 +46,17 @@ jobs:
       KEYVAULT_NAME: ${{ secrets.KEYVAULT_NAME }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AKS_KUBELET_IDENTITY_CLIENT_ID: ${{ secrets.AKS_KUBELET_IDENTITY_CLIENT_ID }}
-      # When triggered by workflow_run, use the SHA from the spark-image build.
-      # When triggered manually, prefer the explicit input, then fall back to the repo variable.
-      SPARK_IMAGE_TAG: ${{ github.event.workflow_run.head_sha || inputs.spark_image_tag || vars.SPARK_IMAGE_TAG }}
+      # When triggered by a workflow_run, only apply head_sha to the image that
+      # was actually built — discriminate by workflow name to avoid using a
+      # Superset SHA as the Spark tag and vice versa.
+      SPARK_IMAGE_TAG: >-
+        ${{ (github.event.workflow_run.name == 'Spark Image' && github.event.workflow_run.head_sha)
+            || inputs.spark_image_tag
+            || vars.SPARK_IMAGE_TAG }}
+      SUPERSET_IMAGE_TAG: >-
+        ${{ (github.event.workflow_run.name == 'Superset Image' && github.event.workflow_run.head_sha)
+            || inputs.superset_image_tag
+            || vars.SUPERSET_IMAGE_TAG }}
 
     steps:
       - uses: actions/checkout@v4
@@ -154,6 +166,11 @@ jobs:
               kubectl wait externalsecret/"${svc}-secrets" -n "$svc" \
                 --for=condition=Ready=True --timeout=60s
             fi
+            # Apply any supplemental manifests (e.g. superset-redis.yaml) before
+            # the Helm install so chart-internal wait probes can resolve them.
+            if [ -f "helm/${svc}-redis.yaml" ]; then
+              kubectl apply -f "helm/${svc}-redis.yaml"
+            fi
             helm upgrade --install "$svc" "$chart" \
               --version "$version" \
               -f <(envsubst < "helm/${svc}-values.yaml") \
@@ -173,8 +190,8 @@ jobs:
           deploy airbyte  airbyte/airbyte               "$airbyte_ver"  10m
           deploy spark    spark-operator/spark-operator "$spark_ver"    5m
           deploy trino    trinodb/trino                 "$trino_ver"    5m
-          deploy airflow  apache-airflow/airflow        "$airflow_ver"  5m
-          deploy superset superset/superset             "$superset_ver" 5m
+          deploy airflow  apache-airflow/airflow        "$airflow_ver"  10m
+          deploy superset superset/superset             "$superset_ver" 10m
 
       - name: deploy single service
         if: ${{ inputs.service }}
@@ -217,7 +234,10 @@ jobs:
             kubectl wait externalsecret/"${svc}-secrets" -n "$svc" \
               --for=condition=Ready=True --timeout=60s
           fi
-          declare -A TIMEOUTS=([airbyte]="10m")
+          if [ -f "helm/${svc}-redis.yaml" ]; then
+            kubectl apply -f "helm/${svc}-redis.yaml"
+          fi
+          declare -A TIMEOUTS=([airbyte]="10m" [airflow]="10m" [superset]="10m")
           timeout="${TIMEOUTS[$svc]:-5m}"
           helm upgrade --install "$svc" "$chart" \
             --version "$version" \

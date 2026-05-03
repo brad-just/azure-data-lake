@@ -14,24 +14,36 @@ data:
   metadataSecretName: airflow-secrets
 
 fernetKeySecretName: airflow-secrets
+webserverSecretKeySecretName: airflow-secrets
 
-# DAG storage — placeholder ConfigMap mount with a single no-op DAG
+# DAG storage — placeholder ConfigMap mounted via extraVolumes
 # TODO: replace with git-sync sidecar pointing to your DAGs repository
 dags:
   persistence:
     enabled: false
   gitSync:
     enabled: false  # TODO: enable and configure git-sync for production DAG delivery
-  configMap: airflow-dags-placeholder
+
+extraVolumes:
+  - name: dags-placeholder
+    configMap:
+      name: airflow-dags-placeholder
+
+extraVolumeMounts:
+  - name: dags-placeholder
+    mountPath: /opt/airflow/dags/noop_dag.py
+    subPath: noop_dag.py
+    readOnly: true
 
 # KubernetesExecutor pod template
 workers:
-  resources:
-    requests:
-      cpu: 250m
-      memory: 512Mi   # TODO: tune per DAG requirements
-    limits:
-      memory: 1Gi
+  kubernetes:
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi   # TODO: tune per DAG requirements
+      limits:
+        memory: 1Gi
 
 scheduler:
   resources:
